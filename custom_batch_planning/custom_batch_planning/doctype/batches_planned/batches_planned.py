@@ -1,6 +1,10 @@
-import frappe, json
+# Copyright (c) 2026, Shivam Singh and contributors
+# For license information, please see license.txt
+
+import frappe
+import json
 from frappe.model.document import Document
-from frappe.utils import flt
+from frappe.utils import flt, today
 
 
 # ═══════════════════════════════════════════════
@@ -10,11 +14,13 @@ class BatchesPlanned(Document):
 
     # Prevent delete if Material Allocation exists
     def on_trash(self):
-
-        if frappe.db.exists("Material Allocation", {"batch_planning": self.name}):
-
+        if frappe.db.exists(
+            "Material Allocation",
+            {"batch_planning": self.name}
+        ):
             frappe.throw(
-                f"Cannot delete Batches Planned <b>{self.name}</b>. "
+                f"Cannot delete Batches Planned "
+                f"<b>{self.name}</b>. "
                 f"Material Allocation exists for it."
             )
 
@@ -23,122 +29,144 @@ class BatchesPlanned(Document):
 # API : Get Material Planning Data
 # ═══════════════════════════════════════════════
 @frappe.whitelist()
-def get_material_planning_data(items, warehouse, batch_planning, employee_function):
+def get_material_planning_data(
+    items,
+    warehouse,
+    batch_planning,
+    employee_function
+):
     """
-    Calculates stock, allocation,
-    requirement and FEFO details.
+    Calculates:
+    - Main warehouse stock (SLE)
+    - Lab warehouse stock (SLE filtered by EF)
+    - Allocation (Filtered by EF)
+    - Open PR / PO / GRN (EF filtered)
+    - Net requirement
+    - FEFO batch details
     """
 
-    # Convert JSON string to list
-    if isinstance(items, str): items = json.loads(items)
+    if isinstance(items, str):
+        items = json.loads(items)
 
     res = []
+    curr_today = today()
 
-    # Loop through all items
+    # Get Lab Warehouses from Employee Function
+    ef_doc = frappe.get_doc("Employee Function", employee_function)
+    lab_warehouses = [r.lab_warehouse for r in (ef_doc.get("table_szrn") or []) if r.lab_warehouse]
+
     for item in items:
-
         item_code = item.get("item_code")
         qty_required = flt(item.get("qty_required"))
 
-        # 1. Main Warehouse Stock
+        # 1. Main Warehouse Stock (Latest from SLE)
         sle_main = frappe.db.sql("""
             SELECT qty_after_transaction
             FROM `tabStock Ledger Entry`
-            WHERE item_code=%s AND warehouse=%s
-            AND is_cancelled=0
+            WHERE item_code = %s AND warehouse = %s AND is_cancelled = 0
             ORDER BY posting_date DESC, posting_time DESC, creation DESC
             LIMIT 1
         """, (item_code, warehouse))
 
         main_stock = flt(sle_main[0][0]) if sle_main else 0.0
 
-        # 2. Total / Lab Stock
-        total_stock = frappe.db.get_value(
-            "Stock Ledger Entry",
-            {"item_code": item_code, "is_cancelled": 0},
-            "sum(actual_qty)"
-        ) or 0
+        # 2. Lab Warehouse Stock
+        lab_stock = 0.0
+        for lab_wh in lab_warehouses:
+            row = frappe.db.sql("""
+                SELECT qty_after_transaction FROM `tabStock Ledger Entry`
+                WHERE item_code = %s AND warehouse = %s AND is_cancelled = 0
+                ORDER BY posting_date DESC, posting_time DESC, creation DESC LIMIT 1
+            """, (item_code, lab_wh))
+            if row:
+                lab_stock += flt(row[0][0])
 
-        lab_stock = total_stock - main_stock
+        total_stock = main_stock + lab_stock
 
-        # 3. Allocated Quantity
+        # 3. Allocated Quantity (Global for this EF)
         allocated_qty = frappe.db.sql("""
-            SELECT IFNULL(SUM(mai.allocate_qty),0)
+            SELECT IFNULL(SUM(mai.allocate_qty), 0)
             FROM `tabMaterial Allocation Item` mai
             INNER JOIN `tabMaterial Allocation` ma ON ma.name = mai.parent
-            WHERE mai.item_code=%s
-            AND ma.employee_function=%s
-            AND ma.allocation_status='Allocated'
-            AND ma.docstatus!=2
+            WHERE mai.item_code = %s
+            AND ma.employee_function = %s
+            AND ma.allocation_status != 'Deallocated'
+            AND ma.docstatus != 2
         """, (item_code, employee_function))[0][0] or 0
 
-        # 4. Free Stock / Net Requirement
-        free_stock = max(main_stock - allocated_qty, 0)
-        net_requirement = max(qty_required - free_stock, 0)
-
-        # 5. Open PR / PO
+        # 4. Open PR
         open_pr = frappe.db.sql("""
-            SELECT SUM(qty - ordered_qty)
-            FROM `tabMaterial Request Item`
-            WHERE item_code=%s
-            AND docstatus=1
-            AND qty > ordered_qty
-        """, item_code)[0][0] or 0
+            SELECT IFNULL(SUM(mri.qty - mri.ordered_qty), 0)
+            FROM `tabMaterial Request Item` mri
+            JOIN `tabMaterial Request` mr ON mr.name = mri.parent
+            WHERE mri.item_code = %s AND mr.custom_employee_function = %s
+            AND mr.docstatus = 1 AND mr.status IN ('Pending', 'Partially Ordered', 'Ordered')
+            AND mri.qty > mri.ordered_qty
+        """, (item_code, employee_function))[0][0] or 0
 
+        # 5. Open PO
         open_po = frappe.db.sql("""
-            SELECT SUM(qty - received_qty)
-            FROM `tabPurchase Order Item`
-            WHERE item_code=%s
-            AND docstatus=1
-            AND qty > received_qty
-        """, item_code)[0][0] or 0
+            SELECT IFNULL(SUM(poi.qty - poi.received_qty), 0)
+            FROM `tabPurchase Order Item` poi
+            JOIN `tabPurchase Order` po ON po.name = poi.parent
+            WHERE poi.item_code = %s AND poi.employee_function = %s
+            AND po.docstatus = 1 AND po.status IN ('To Receive and Bill', 'To Receive')
+            AND poi.qty > poi.received_qty
+        """, (item_code, employee_function))[0][0] or 0
 
-        # Placeholder for future GRN logic
-        open_grn = 0
+        # 6. Open GRN
+        open_grn = frappe.db.sql("""
+            SELECT IFNULL(SUM(pri.qty - pri.returned_qty), 0)
+            FROM `tabPurchase Receipt Item` pri
+            JOIN `tabPurchase Receipt` pr ON pr.name = pri.parent
+            WHERE pri.item_code = %s AND pri.employee_function = %s
+            AND pr.docstatus = 1 AND pr.status IN ('To Bill', 'Partly Billed')
+            AND pri.qty > pri.returned_qty
+        """, (item_code, employee_function))[0][0] or 0
 
-        # 6. FEFO Batch Details
+        # 7. Free Stock & Net Requirement
+        free_stock = max(main_stock - flt(allocated_qty), 0)
+        net_requirement = max(qty_required - (free_stock + open_pr + open_po + open_grn), 0)
+
+        # 8. FEFO Batch & Usable Qty
         batch_info = frappe.db.sql("""
-            SELECT b.expiry_date, SUM(sle.actual_qty) as actual_qty
+            SELECT b.expiry_date, SUM(sle.actual_qty) AS actual_qty
             FROM `tabStock Ledger Entry` sle
             INNER JOIN `tabBatch` b ON b.name = sle.batch_no
-            WHERE sle.item_code=%s
-            AND sle.is_cancelled=0
-            AND (b.expiry_date >= CURDATE() OR b.expiry_date IS NULL)
+            WHERE sle.item_code = %s AND sle.is_cancelled = 0
+            AND (b.expiry_date >= %s OR b.expiry_date IS NULL)
             GROUP BY sle.batch_no, b.expiry_date
             HAVING SUM(sle.actual_qty) > 0
-            ORDER BY b.expiry_date ASC
-            LIMIT 1
-        """, item_code, as_dict=True)
+            ORDER BY b.expiry_date ASC LIMIT 1
+        """, (item_code, curr_today), as_dict=True)
 
-        # 7. Expired Quantity
+        # 9. Expired Quantity
         expired_qty = frappe.db.sql("""
-            SELECT SUM(sle.actual_qty)
+            SELECT IFNULL(SUM(sle.actual_qty), 0)
             FROM `tabStock Ledger Entry` sle
             INNER JOIN `tabBatch` b ON b.name = sle.batch_no
-            WHERE sle.item_code=%s
-            AND sle.is_cancelled=0
-            AND b.expiry_date < CURDATE()
-        """, item_code)[0][0] or 0
+            WHERE sle.item_code = %s AND sle.is_cancelled = 0
+            AND b.expiry_date < %s
+        """, (item_code, curr_today))[0][0] or 0
 
-        usable_qty = batch_info[0].actual_qty if batch_info else 0
+        usable_qty = flt(batch_info[0].actual_qty) if batch_info else 0
         expiry_date = batch_info[0].expiry_date if batch_info else None
 
-        # Final Response Row
         res.append({
             "item_code": item_code,
             "item_name": item.get("item_name"),
-            "qty_required": qty_required,
-            "total_stock": total_stock,
-            "main_stock": main_stock,
-            "lab_stock": lab_stock,
-            "allocated_qty": allocated_qty,
-            "free_stock": free_stock,
-            "open_pr": open_pr,
-            "open_po": open_po,
-            "open_grn": open_grn,
-            "net_requirement": net_requirement,
-            "usable_qty": usable_qty,
-            "expired_qty": expired_qty,
+            "qty_required": round(qty_required, 2),
+            "total_stock": round(total_stock, 2),
+            "main_stock": round(main_stock, 2),
+            "lab_stock": round(lab_stock, 2),
+            "allocated_qty": round(flt(allocated_qty), 2),
+            "free_stock": round(free_stock, 2),
+            "open_pr": round(flt(open_pr), 2),
+            "open_po": round(flt(open_po), 2),
+            "open_grn": round(flt(open_grn), 2),
+            "net_requirement": round(net_requirement, 2),
+            "usable_qty": round(usable_qty, 2),
+            "expired_qty": round(flt(expired_qty), 2),
             "expiry_date": expiry_date
         })
 
@@ -150,116 +178,62 @@ def get_material_planning_data(items, warehouse, batch_planning, employee_functi
 # ═══════════════════════════════════════════════
 @frappe.whitelist()
 def get_bom_items_for_ma(batch_planning):
-
-    # Fetch Batches Planned & Batch Creation
     bp = frappe.get_doc("Batches Planned", batch_planning)
-
     if not bp.batch_creation:
         frappe.throw("Batch Creation not linked!")
 
     bc = frappe.get_doc("Batch Creation", bp.batch_creation)
+    matched = next((row for row in (bc.custom_batch_details or []) 
+                    if row.batch_planning_id in (batch_planning, bp.amended_from, batch_planning.rsplit("-", 1)[0])), None)
 
-    matched = None
-
-    # Match Batch Planning / Amendment / Base ID
-    for row in (bc.custom_batch_details or []):
-
-        if row.batch_planning_id in (
-            batch_planning,
-            bp.amended_from,
-            batch_planning.rsplit("-", 1)[0]
-        ):
-            matched = row
-            break
-
-    # Validate BOM
     if not matched or not matched.bom_list:
-
         frappe.throw(f"BOM not found for: {batch_planning}")
 
     batch_key = f"{bp.batch_creation}-{matched.idx}"
-    use_store, items = False, []
+    use_store = False
+    items = []
 
-    # Use Edited BOM Store
+    # Process Development / Machine Trial check
     if matched.batch_type in ("Process Development", "Machine Trial"):
-
-        bom_store = frappe.db.get_value(
-            "Batch BOM Store after Edit",
-            {"batch_id": batch_key},
-            "name"
-        )
-
+        bom_store = frappe.db.get_value("Batch BOM Store after Edit", {"batch_id": batch_key}, "name")
         if bom_store:
-
-            store_doc = frappe.get_doc(
-                "Batch BOM Store after Edit",
-                bom_store
-            )
-
+            store_doc = frappe.get_doc("Batch BOM Store after Edit", bom_store)
             items = store_doc.bom_components or []
             use_store = True
 
-    # Default BOM
     if not use_store:
-
         bom = frappe.get_doc("BOM", matched.bom_list)
         items = bom.exploded_items or bom.items or []
 
-    # Fetch Warehouse
+    # Get Warehouse
     ef = frappe.get_doc("Employee Function", bp.employee_function)
-
-    warehouse = next(
-        (r.store_warehouse for r in (ef.table_bukm or []) if r.store_warehouse),
-        None
-    )
+    warehouse = next((r.store_warehouse for r in (ef.table_bukm or []) if r.store_warehouse), None)
 
     result = []
-
-    # Prepare Final Item List
     for item in items:
-
-        # Qty / UOM Logic
-        if use_store:
-
-            qty, uom = float(item.qty or 0), item.uom or ""
-
-        else:
-
-            qty = float(
-                item.qty_consumed_per_unit
-                or item.stock_qty
-                or item.qty
-                or 0
-            )
-
-            uom = item.stock_uom or item.uom or ""
-
+        qty = flt(item.qty if use_store else (item.qty_consumed_per_unit or item.stock_qty or item.qty))
+        uom = item.uom if use_store else (item.stock_uom or item.uom)
         item_code = item.item_code
 
         # Main Stock
-        main_stock = float(
-            frappe.db.get_value(
-                "Bin",
-                {"item_code": item_code, "warehouse": warehouse},
-                "actual_qty"
-            ) or 0
-        )
+        sle = frappe.db.sql("""
+            SELECT qty_after_transaction FROM `tabStock Ledger Entry`
+            WHERE item_code = %s AND warehouse = %s AND is_cancelled = 0
+            ORDER BY posting_date DESC, posting_time DESC, creation DESC LIMIT 1
+        """, (item_code, warehouse))
+        main_stock = flt(sle[0][0]) if sle else 0.0
 
-        # Allocated Qty
+        # Allocated Qty (Fixed Filter)
         allocated_qty = frappe.db.sql("""
-            SELECT IFNULL(SUM(mai.allocate_qty),0)
+            SELECT IFNULL(SUM(mai.allocate_qty), 0)
             FROM `tabMaterial Allocation Item` mai
             JOIN `tabMaterial Allocation` ma ON ma.name = mai.parent
-            WHERE mai.item_code=%s
-            AND ma.employee_function=%s
-            AND ma.allocation_status='Allocated'
-            AND ma.docstatus!=2
+            WHERE mai.item_code = %s AND ma.employee_function = %s
+            AND ma.allocation_status != 'Deallocated' AND ma.docstatus != 2
         """, (item_code, bp.employee_function))[0][0] or 0
 
-        # Free Stock
-        free_stock = max(main_stock - float(allocated_qty), 0)
+        free_stock = max(main_stock - flt(allocated_qty), 0)
 
-        # Final Row
         result.append({
             "item_code": item_code,
             "item_name": item.item_name,

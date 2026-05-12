@@ -47,17 +47,7 @@ frappe.ui.form.on('Material Allocation', {
             }
         }
 
-        // Add Raise Material Request for Shortages button (only if MR not already created)
-        if (!frm.is_new() && frm.doc.workflow_state === 'Approved' && !frm.doc.mr_created && frm.doc.material_allocation && frm.doc.material_allocation.length) {
-            let has_shortage = (frm.doc.material_allocation || []).some(row => {
-                return parseFloat(row.quantity_required || 0) > parseFloat(row.stock_available || 0);
-            });
-            if (has_shortage) {
-                frm.add_custom_button(__('Raise Material Request'), function () {
-                    window.raise_shortage_material_request(frm);
-                }, __('Actions')).addClass('btn-warning');
-            }
-        }
+
 
         // Action Buttons: Visibility based on allocation status
         if (!frm.is_new() && frm.doc.workflow_state === 'Approved') {
@@ -123,7 +113,7 @@ frappe.ui.form.on('Material Allocation', {
                 title: __('⚠️ Insufficient Stock'),
                 message: __(
                     'The following items have <b>Stock Available less than Qty Requested</b>. ' +
-                    'Please adjust the Qty Requested or raise a Material Request for shortages.<br><br>' +
+                    'Please adjust the Qty Requested shortages.<br><br>' +
                     rows_list
                 ),
                 indicator: 'red'
@@ -325,63 +315,6 @@ window.upload_bom_items = function (frm) {
             });
             frm.refresh_field('material_allocation');
             frappe.show_alert({ message: '✅ BOM Items loaded! Please review and save.', indicator: 'green' });
-        }
-    });
-};
-
-window.raise_shortage_material_request = function (frm) {
-    let shortage_items = [];
-    (frm.doc.material_allocation || []).forEach(row => {
-        let req = parseFloat(row.quantity_required || 0);
-        let stock = parseFloat(row.stock_available || 0);
-        let shortage = req - stock;
-        if (shortage > 0) {
-            shortage_items.push({
-                item_code: row.item_code,
-                qty: shortage,
-                uom: row.uom,
-                schedule_date: frappe.datetime.add_days(frappe.datetime.get_today(), 1)
-            });
-        }
-    });
-
-    if (shortage_items.length === 0) {
-        frappe.msgprint({ title: 'No Shortage', message: 'All items have sufficient stock. No Material Request needed.', indicator: 'green' });
-        return;
-    }
-
-    frappe.new_doc('Material Request', {
-        material_request_type: "Manufacture",
-        custom_batch_no: frm.doc.batch_planning,
-        custom_employee_function: frm.doc.employee_function,
-        project: frm.doc.project,
-        custom_project_name: frm.doc.project_name
-    }).then(() => {
-        if (cur_frm) {
-            cur_frm.clear_table('items');
-            shortage_items.forEach(item => {
-                let r = cur_frm.add_child('items');
-                r.item_code = item.item_code;
-                r.qty = item.qty;
-                r.uom = item.uom;
-                r.schedule_date = item.schedule_date;
-            });
-            cur_frm.refresh_field('items');
-            frappe.show_alert({ message: 'Material Request populated with shortage items.', indicator: 'green' });
-
-            // Mark MR as created on the Material Allocation doc to prevent duplicates
-            frappe.call({
-                method: 'frappe.client.set_value',
-                args: {
-                    doctype: 'Material Allocation',
-                    name: frm.doc.name,
-                    fieldname: 'mr_created',
-                    value: 1
-                },
-                callback: function () {
-                    // Button will be hidden on next refresh
-                }
-            });
         }
     });
 };

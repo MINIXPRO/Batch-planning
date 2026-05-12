@@ -1639,30 +1639,30 @@
             <table class="data-table">
                 <thead>
                     <tr class="group-row">
-                        <th colspan="4" class="th-group-info">Item Info</th>
-                        <th colspan="5" class="th-group-stock">Stock</th>
-                        <th colspan="3" class="th-group-flow">Incoming</th>
-                        <th colspan="3" class="th-group-result">Result</th>
-                        <th colspan="1" class="th-group-status">Status</th>
-                    </tr>
-                    <tr class="col-row">
-                        <th>#</th>
-                        <th>Item Code</th>
-                        <th>Item Name</th>
-                        <th>UOM</th>
-                        <th style="border-left:2px solid #bfdbfe;">Qty Req</th>
-                        <th>Total Stock</th>
-                        <th>Main WH</th>
-                        <th>Lab Wise</th>
-                        <th style="border-right:2px solid #bfdbfe;">Allocated</th>
-                        <th style="border-left:2px solid #bbf7d0;">Open PR</th>
-                        <th>Open PO</th>
-                        <th style="border-right:2px solid #bbf7d0;">Open GRN</th>
-                        <th style="border-left:2px solid #fde68a;">Free Qty</th>
-                        <th>Net Req</th>
-                        <th style="border-right:2px solid #fde68a;">Expired Qty</th>
-                        <th>Status</th>
-                    </tr>
+    <th colspan="4" class="th-group-info">Item Info</th>
+    <th colspan="6" class="th-group-stock">Stock</th>
+    <th colspan="3" class="th-group-flow">Incoming</th>
+    <th colspan="2" class="th-group-result">Result</th>
+    <th colspan="1" class="th-group-status">Status</th>
+</tr>
+<tr class="col-row">
+    <th>#</th>
+    <th>Item Code</th>
+    <th>Item Name</th>
+    <th>UOM</th>
+    <th style="border-left:2px solid #bfdbfe;">Qty Req</th>
+    <th>Total Stock</th>
+    <th>Main WH</th>
+    <th>Allocated</th>
+    <th>Free Qty</th>
+    <th style="border-right:2px solid #bfdbfe;">Lab Wise</th>
+    <th style="border-left:2px solid #bbf7d0;">Open PR</th>
+    <th>Open PO</th>
+    <th style="border-right:2px solid #bbf7d0;">Open GRN</th>
+    <th style="border-left:2px solid #fde68a;">Net Req</th>
+    <th style="border-right:2px solid #fde68a;">Expired Qty</th>
+    <th>Status</th>
+</tr>
                 </thead>
                 <tbody>`;
 
@@ -1673,26 +1673,23 @@
 
                 html += `
                 <tr class="${isShortage ? 'shortage-row' : ''}">
-                    <td><span class="row-num">${i + 1}</span></td>
-                    <td><a class="item-code-link" href="/app/item/${row.item_code}" target="_blank">${row.item_code}</a></td>
-                    <td><span class="item-name" title="${row.item_name || ''}">${row.item_name || '—'}</span></td>
-                    <td><span class="uom-text">${row.uom || '—'}</span></td>
-                    <td style="border-left:2px solid #bfdbfe;"><span class="num num-orange">${fmt(row.required_qty)}</span></td>
-                    <td><span class="num num-blue">${fmt(row.total_stock)}</span></td>
-                    <td><span class="num num-blue">${fmt(row.main_stock)}</span></td>
-                    <td><span class="num num-purple">${fmt(row.lab_stock)}</span></td>
-                    <td style="border-right:2px solid #bfdbfe;"><span class="num num-orange">${fmt(row.allocated_qty)}</span></td>
-                    <td style="border-left:2px solid #bbf7d0;"><span class="num num-teal">${fmt(row.open_pr)}</span></td>
-                    <td><span class="num num-blue">${fmt(row.open_po)}</span></td>
-                    <td style="border-right:2px solid #bbf7d0;"><span class="num num-green">${fmt(row.open_grn)}</span></td>
-                    <td style="border-left:2px solid #fde68a;"><span class="num ${freeColor}">${fmt(row.free_stock)}</span></td>
-                    <td><span class="num ${netReqColor}">${fmt(row.net_requirement)}</span></td>
-                    <td style="border-right:2px solid #fde68a;"><span class="num num-red">${fmt(row.expired_qty)}</span></td>
-                    <td>${isShortage
-                        ? '<span class="badge-shortage">⚠️ Shortage</span>'
-                        : '<span class="badge-ok">✅ OK</span>'
-                    }</td>
-                </tr>`;
+    <td><span class="row-num">${i + 1}</span></td>
+    <td><a class="item-code-link" href="/app/item/${row.item_code}" target="_blank">${row.item_code}</a></td>
+    <td><span class="item-name" title="${row.item_name || ''}">${row.item_name || '—'}</span></td>
+    <td><span class="uom-text">${row.uom || '—'}</span></td>
+    <td style="border-left:2px solid #bfdbfe;"><span class="num num-orange">${fmt(row.required_qty)}</span></td>
+    <td><span class="num num-blue">${fmt(row.total_stock)}</span></td>
+    <td><span class="num num-blue">${fmt(row.main_stock)}</span></td>
+    <td><span class="num num-orange">${fmt(row.allocated_qty)}</span></td>
+    <td><span class="num ${freeColor}">${fmt(row.free_stock)}</span></td>
+    <td style="border-right:2px solid #bfdbfe;"><span class="num num-purple">${fmt(row.lab_stock)}</span></td>
+    <td style="border-left:2px solid #bbf7d0;"><span class="num num-teal">${fmt(row.open_pr)}</span></td>
+    <td><span class="num num-blue">${fmt(row.open_po)}</span></td>
+    <td style="border-right:2px solid #bbf7d0;"><span class="num num-green">${fmt(row.open_grn)}</span></td>
+    <td style="border-left:2px solid #fde68a;"><span class="num ${netReqColor}">${fmt(row.net_requirement)}</span></td>
+    <td style="border-right:2px solid #fde68a;"><span class="num num-red">${fmt(row.expired_qty)}</span></td>
+    <td>${isShortage ? '<span class="badge-shortage">⚠️ Shortage</span>' : '<span class="badge-ok">✅ OK</span>'}</td>
+</tr>`;
             });
 
             html += '</tbody></table>';
