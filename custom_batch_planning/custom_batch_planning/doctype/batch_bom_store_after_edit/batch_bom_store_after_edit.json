@@ -1,0 +1,57 @@
+{
+ "actions": [],
+ "allow_rename": 1,
+ "creation": "2026-04-29 10:44:10.877986",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "field_order": [
+  "batch_id",
+  "bom_name",
+  "bom_components"
+ ],
+ "fields": [
+  {
+   "fieldname": "batch_id",
+   "fieldtype": "Data",
+   "label": "Batch ID"
+  },
+  {
+   "fieldname": "bom_name",
+   "fieldtype": "Data",
+   "label": "BOM Name"
+  },
+  {
+   "fieldname": "bom_components",
+   "fieldtype": "Table",
+   "label": "Bom Components",
+   "options": "Batch BOM Child Table"
+  }
+ ],
+ "grid_page_length": 50,
+ "index_web_pages_for_search": 1,
+ "links": [],
+ "modified": "2026-04-30 10:59:33.487418",
+ "modified_by": "Administrator",
+ "module": "Custom Batch Planning",
+ "name": "Batch BOM Store after Edit",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "System Manager",
+   "share": 1,
+   "write": 1
+  }
+ ],
+ "row_format": "Dynamic",
+ "rows_threshold_for_grid_search": 20,
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": []
+}

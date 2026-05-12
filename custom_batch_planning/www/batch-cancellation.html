@@ -1,0 +1,912 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Batch Cancellation</title>
+    <script>window.csrf_token = "{{ frappe.session.csrf_token }}";</script>
+    <link
+        href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600;700&family=DM+Mono:wght@400;500&display=swap"
+        rel="stylesheet">
+    <style>
+        *,
+        *::before,
+        *::after {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        :root {
+            --bg: #fdf6f0;
+            --surface: #ffffff;
+            --surface2: #fff3eb;
+            --border: #f0d5c0;
+            --text: #1a1208;
+            --muted: #9a7560;
+            --accent: #e53935;
+            --accent2: #e65c00;
+            --green: #2e7d32;
+            --yellow: #f59e0b;
+            --purple: #7b1fa2;
+        }
+
+        body {
+            background: var(--bg);
+            font-family: 'DM Sans', sans-serif;
+            color: var(--text);
+            min-height: 100vh;
+        }
+
+        /* ── HEADER ── */
+        .page-header {
+            background: var(--surface);
+            border-bottom: 1px solid var(--border);
+            padding: 0 28px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            height: 60px;
+            position: sticky;
+            top: 0;
+            z-index: 100;
+        }
+
+        .header-left {
+            display: flex;
+            align-items: center;
+            gap: 14px;
+        }
+
+        .header-icon {
+            width: 36px;
+            height: 36px;
+            background: linear-gradient(135deg, #e53935, #b71c1c);
+            border-radius: 8px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 16px;
+        }
+
+        .header-title {
+            font-size: 16px;
+            font-weight: 700;
+            color: var(--text);
+        }
+
+        .header-sub {
+            font-size: 12px;
+            color: var(--muted);
+            margin-top: 1px;
+        }
+
+        .header-right {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .ef-chip {
+            background: var(--surface2);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 6px 14px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .ef-chip-item {
+            display: flex;
+            flex-direction: column;
+        }
+
+        .ef-chip-label {
+            font-size: 10px;
+            color: var(--muted);
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .ef-chip-value {
+            font-size: 13px;
+            font-weight: 600;
+            font-family: 'DM Mono', monospace;
+            color: var(--accent2);
+        }
+
+        .ef-chip-sep {
+            width: 1px;
+            height: 28px;
+            background: var(--border);
+        }
+
+        .ef-chip-head {
+            font-size: 13px;
+            font-weight: 600;
+            color: var(--text);
+        }
+
+        .admin-badge {
+            background: linear-gradient(135deg, #a855f7, #7c3aed);
+            color: #fff;
+            font-size: 11px;
+            font-weight: 700;
+            padding: 3px 10px;
+            border-radius: 20px;
+            letter-spacing: 0.5px;
+        }
+
+        /* ── MAIN CONTENT ── */
+        .main {
+            padding: 24px 28px;
+            max-width: 1600px;
+            margin: 0 auto;
+        }
+
+        /* ── STATS ── */
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 16px;
+            margin-bottom: 20px;
+        }
+
+        .stat-card {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            padding: 18px 20px;
+        }
+
+        .stat-label {
+            font-size: 11px;
+            color: var(--muted);
+            text-transform: uppercase;
+            letter-spacing: 0.6px;
+            margin-bottom: 8px;
+        }
+
+        .stat-value {
+            font-size: 28px;
+            font-weight: 700;
+            font-family: 'DM Mono', monospace;
+        }
+
+        /* ── FILTERS ── */
+        .filters-card {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            padding: 18px 20px;
+            margin-bottom: 20px;
+        }
+
+        .filters-row {
+            display: flex;
+            gap: 12px;
+            align-items: flex-end;
+            flex-wrap: wrap;
+        }
+
+        .filter-group {
+            display: flex;
+            flex-direction: column;
+            gap: 5px;
+            flex: 1;
+            min-width: 140px;
+        }
+
+        .filter-group label {
+            font-size: 11px;
+            font-weight: 600;
+            color: var(--muted);
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .filter-group input,
+        .filter-group select {
+            background: var(--surface2);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            color: var(--text);
+            font-family: 'DM Sans', sans-serif;
+            font-size: 13px;
+            padding: 9px 12px;
+            height: 38px;
+            outline: none;
+            transition: border-color 0.2s;
+        }
+
+        .filter-group input:focus,
+        .filter-group select:focus {
+            border-color: var(--accent2);
+        }
+
+        .filter-group select option {
+            background: var(--surface2);
+        }
+
+        /* Admin EF filter - purple accent */
+        .filter-group.admin-ef select {
+            border-color: #a855f7;
+            color: #a855f7;
+        }
+
+        .filter-group.admin-ef label {
+            color: #a855f7;
+        }
+
+        .admin-ef-wrap {
+            display: none;
+        }
+
+        /* ── BUTTONS ── */
+        .btn {
+            height: 38px;
+            border: none;
+            border-radius: 8px;
+            font-family: 'DM Sans', sans-serif;
+            font-size: 13px;
+            font-weight: 600;
+            cursor: pointer;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 6px;
+            padding: 0 18px;
+            transition: all 0.2s;
+            white-space: nowrap;
+        }
+
+        .btn-refresh {
+            background: var(--accent2);
+            color: #fff;
+        }
+
+        .btn-refresh:hover {
+            background: #1565c0;
+        }
+
+        .btn-cancel-sel {
+            background: var(--accent);
+            color: #fff;
+        }
+
+        .btn-cancel-sel:hover:not(:disabled) {
+            background: #c62828;
+        }
+
+        .btn-cancel-sel:disabled {
+            background: #2a2f45;
+            color: var(--muted);
+            cursor: not-allowed;
+        }
+
+        /* ── TABLE ── */
+        .table-card {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            overflow: hidden;
+        }
+
+        .table-wrap {
+            overflow-x: auto;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+
+        thead th {
+            background: #fff3eb;
+            color: #9a7560;
+            font-size: 11px;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.6px;
+            padding: 12px 16px;
+            text-align: left;
+            border-bottom: 1px solid var(--border);
+            white-space: nowrap;
+        }
+
+        tbody td {
+            border-bottom: 1px solid #f0d5c0;
+            padding: 12px 16px;
+            font-size: 13px;
+            vertical-align: middle;
+        }
+
+        tbody tr:last-child td {
+            border-bottom: none;
+        }
+
+        tbody tr:hover td {
+            background: rgba(255, 255, 255, 0.02);
+        }
+
+        tbody tr.cancelled-row td {
+            opacity: 0.45;
+        }
+
+        tbody tr.cancelled-row input[type="checkbox"] {
+            pointer-events: none;
+            opacity: 0.3;
+        }
+
+        /* ── BADGES ── */
+        .badge {
+            display: inline-flex;
+            align-items: center;
+            padding: 3px 10px;
+            border-radius: 20px;
+            font-size: 11px;
+            font-weight: 600;
+            white-space: nowrap;
+        }
+
+        .badge-approved {
+            background: #14532d22;
+            color: #22c55e;
+            border: 1px solid #22c55e33;
+        }
+
+        .badge-draft {
+            background: #37415122;
+            color: #9ca3af;
+            border: 1px solid #37415166;
+        }
+
+        .badge-pending {
+            background: #78350f22;
+            color: #f59e0b;
+            border: 1px solid #f59e0b33;
+        }
+
+        .badge-rejected {
+            background: #7f1d1d22;
+            color: #f87171;
+            border: 1px solid #f8717133;
+        }
+
+        .badge-cancelled {
+            background: #1f273022;
+            color: #6b7280;
+            border: 1px solid #37415144;
+            text-decoration: line-through;
+        }
+
+        .badge-mfg {
+            background: #1e3a5f22;
+            color: #60a5fa;
+            border: 1px solid #60a5fa33;
+        }
+
+        .badge-pd {
+            background: #78350f22;
+            color: #fb923c;
+            border: 1px solid #fb923c33;
+        }
+
+        .badge-trial {
+            background: #4c1d9522;
+            color: #c084fc;
+            border: 1px solid #c084fc33;
+        }
+
+        .linked-pill {
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+            background: var(--surface2);
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            padding: 2px 8px;
+            font-size: 11px;
+            font-family: 'DM Mono', monospace;
+            color: var(--text);
+        }
+
+        .bp-link {
+            color: var(--accent2);
+            text-decoration: none;
+            font-family: 'DM Mono', monospace;
+            font-size: 12px;
+            font-weight: 500;
+        }
+
+        .bp-link:hover {
+            text-decoration: underline;
+        }
+
+        /* ── EMPTY / LOADING ── */
+        .state-box {
+            padding: 60px 20px;
+            text-align: center;
+            color: var(--muted);
+            font-size: 14px;
+        }
+
+        .state-box .icon {
+            font-size: 36px;
+            margin-bottom: 12px;
+        }
+
+        /* ── CHECKBOX ── */
+        input[type="checkbox"] {
+            width: 16px;
+            height: 16px;
+            accent-color: var(--accent);
+            cursor: pointer;
+        }
+
+        /* scrollbar */
+        ::-webkit-scrollbar {
+            width: 6px;
+            height: 6px;
+        }
+
+        ::-webkit-scrollbar-track {
+            background: var(--surface);
+        }
+
+        ::-webkit-scrollbar-thumb {
+            background: var(--border);
+            border-radius: 3px;
+        }
+    </style>
+</head>
+
+<body>
+
+    <!-- HEADER -->
+    <div class="page-header">
+        <div class="header-left">
+            <div class="header-icon">❌</div>
+            <div>
+                <div class="header-title">Batch Cancellation</div>
+                <div class="header-sub">Cancel planned batches and auto-release all linked allocations, MRs and POs
+                </div>
+            </div>
+        </div>
+        <div class="header-right">
+            <div class="ef-chip" id="ef-chip" style="display:none">
+                <div class="ef-chip-item">
+                    <span class="ef-chip-label">EF Code</span>
+                    <span class="ef-chip-value" id="ef-code-display">—</span>
+                </div>
+                <div class="ef-chip-sep"></div>
+                <div class="ef-chip-item">
+                    <span class="ef-chip-label">Function Head</span>
+                    <span class="ef-chip-head" id="ef-head-display">—</span>
+                </div>
+            </div>
+            <div class="admin-badge" id="admin-badge" style="display:none">👑 Administrator</div>
+        </div>
+    </div>
+
+    <!-- MAIN -->
+    <div class="main">
+
+        <!-- STATS -->
+        <div class="stats-grid">
+            <div class="stat-card">
+                <div class="stat-label">Total Batches</div>
+                <div class="stat-value" id="stat-total" style="color:var(--accent2)">—</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-label">Selected</div>
+                <div class="stat-value" id="stat-selected" style="color:var(--accent)">0</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-label">Total Linked MAs</div>
+                <div class="stat-value" id="stat-mas" style="color:var(--green)">—</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-label">Last Refreshed</div>
+                <div class="stat-value" id="stat-time" style="color:var(--muted);font-size:15px;margin-top:6px">—</div>
+            </div>
+        </div>
+
+        <!-- FILTERS -->
+        <div class="filters-card">
+            <div class="filters-row">
+
+                <!-- Admin EF filter -->
+                <div class="filter-group admin-ef admin-ef-wrap" id="admin-ef-wrap">
+                    <label>👑 Employee Function</label>
+                    <select id="admin-ef-select" onchange="onAdminEFChange()">
+                        <option value="">All Employee Functions</option>
+                    </select>
+                </div>
+
+                <div class="filter-group">
+                    <label>Batch Planning</label>
+                    <input type="text" id="bp-filter" placeholder="Search BP name..." oninput="filterTable()">
+                </div>
+                <div class="filter-group">
+                    <label>Month</label>
+                    <select id="month-filter" onchange="filterTable()">
+                        <option value="">All Months</option>
+                        <option>January</option>
+                        <option>February</option>
+                        <option>March</option>
+                        <option>April</option>
+                        <option>May</option>
+                        <option>June</option>
+                        <option>July</option>
+                        <option>August</option>
+                        <option>September</option>
+                        <option>October</option>
+                        <option>November</option>
+                        <option>December</option>
+                    </select>
+                </div>
+                <div class="filter-group">
+                    <label>Batch Type</label>
+                    <select id="type-filter" onchange="filterTable()">
+                        <option value="">All Types</option>
+                        <option>Manufacturing</option>
+                        <option>Process Development</option>
+                        <option>Machine Trial</option>
+                    </select>
+                </div>
+                <div class="filter-group">
+                    <label>Status</label>
+                    <select id="status-filter" onchange="filterTable()">
+                        <option value="">All Status</option>
+                        <option value="Draft">Draft</option>
+                        <option value="Pending Approval From Accounts">Pending Approval</option>
+                        <option value="Approved" selected>Approved</option>
+                        <option value="Rejected">Rejected</option>
+                        <option value="Cancelled">Cancelled</option>
+                    </select>
+                </div>
+                <div>
+                    <button class="btn btn-refresh" onclick="loadBatches()">🔄 Refresh</button>
+                </div>
+                <div>
+                    <button class="btn btn-cancel-sel" id="cancel-btn" onclick="cancelSelected()" disabled>
+                        ❌ Cancel Selected (<span id="sel-count">0</span>)
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- TABLE -->
+        <div class="table-card">
+            <div class="table-wrap">
+                <div id="bp-table-div">
+                    <div class="state-box">
+                        <div class="icon">⏳</div>Loading batches...
+                    </div>
+                </div>
+            </div>
+        </div>
+
+    </div>
+
+    <script>
+        let allBPs = [];
+        let isAdmin = false;
+        let currentEF = '';
+
+        function getCsrfToken() {
+            let token = window.csrf_token || '';
+            if (!token || token === 'None') {
+                document.cookie.split(';').forEach(c => {
+                    c = c.trim();
+                    if (c.startsWith('csrf_token=')) token = decodeURIComponent(c.split('=')[1]);
+                });
+            }
+            return token;
+        }
+
+        async function frappe_call(method, args) {
+            const res = await fetch(`/api/method/${method}`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-Frappe-CSRF-Token': getCsrfToken(),
+                    'X-Requested-With': 'XMLHttpRequest',
+                    'Accept': 'application/json'
+                },
+                credentials: 'same-origin',
+                body: JSON.stringify(args)
+            });
+            const data = await res.json();
+            if (data.exc) throw new Error(data.exc);
+            return data.message;
+        }
+
+        async function init() {
+            // Check if admin
+            try {
+                const user = await frappe_call('frappe.client.get_value', {
+                    doctype: 'User',
+                    filters: { name: frappe?.session?.user || '' },
+                    fieldname: 'name'
+                });
+                isAdmin = (frappe?.session?.user === 'Administrator');
+            } catch (e) { }
+
+            // Get EF from URL
+            const params = new URLSearchParams(window.location.search);
+            currentEF = params.get('employee_function') || '';
+
+            if (isAdmin) {
+                document.getElementById('admin-badge').style.display = 'flex';
+                document.getElementById('admin-ef-wrap').style.display = 'flex';
+                await loadAdminEFList();
+                if (currentEF) {
+                    document.getElementById('admin-ef-select').value = currentEF;
+                    await fetchAndShowEFHeader(currentEF);
+                }
+            } else {
+                if (currentEF) {
+                    document.getElementById('ef-chip').style.display = 'flex';
+                    await fetchAndShowEFHeader(currentEF);
+                }
+            }
+
+            await loadBatches();
+        }
+
+        async function loadAdminEFList() {
+            try {
+                const efs = await frappe_call('frappe.client.get_list', {
+                    doctype: 'Employee Function',
+                    fields: ['name', 'function_name', 'function_head'],
+                    limit: 500,
+                    order_by: 'name asc'
+                });
+                const sel = document.getElementById('admin-ef-select');
+                (efs || []).forEach(ef => {
+                    const opt = document.createElement('option');
+                    opt.value = ef.name;
+                    opt.textContent = `${ef.name} — ${ef.function_name || ''}`;
+                    sel.appendChild(opt);
+                });
+            } catch (e) { }
+        }
+
+        async function fetchAndShowEFHeader(efName) {
+            try {
+                const ef = await frappe_call('frappe.client.get', {
+                    doctype: 'Employee Function',
+                    name: efName
+                });
+                document.getElementById('ef-code-display').textContent = ef.name || efName;
+
+                // function_head is email — get full name from Employee or User
+                let headName = ef.function_head || '—';
+                try {
+                    const emp = await frappe_call('frappe.client.get_value', {
+                        doctype: 'User',
+                        filters: { name: ef.function_head },
+                        fieldname: 'full_name'
+                    });
+                    if (emp && emp.full_name) headName = emp.full_name;
+                } catch (e) { }
+
+                document.getElementById('ef-head-display').textContent = headName;
+                document.getElementById('ef-chip').style.display = 'flex';
+            } catch (e) { }
+        }
+
+        async function onAdminEFChange() {
+            const selected = document.getElementById('admin-ef-select').value;
+            currentEF = selected;
+            if (selected) {
+                await fetchAndShowEFHeader(selected);
+            } else {
+                document.getElementById('ef-chip').style.display = 'none';
+            }
+            await loadBatches();
+        }
+
+        async function loadBatches() {
+            document.getElementById('bp-table-div').innerHTML = '<div class="state-box"><div class="icon">⏳</div>Loading batches...</div>';
+
+            try {
+                const args = {};
+                if (!isAdmin && currentEF) args.employee_function = currentEF;
+                if (isAdmin && currentEF) args.employee_function = currentEF;
+
+                const bps = await frappe_call('custom_batch_planning.api.batch_cancellation.get_all_batch_plannings', args);
+
+                if (!bps || bps.length === 0) {
+                    document.getElementById('bp-table-div').innerHTML = '<div class="state-box"><div class="icon">✅</div>No batches found.</div>';
+                    updateStats(0, 0);
+                    return;
+                }
+
+                const bp_names = bps.map(b => b.name);
+
+                const allMAs = await frappe_call('frappe.client.get_list', {
+                    doctype: 'Material Allocation',
+                    filters: [['docstatus', 'in', ['0', '1']], ['batch_planning', '!=', '']],
+                    fields: ['name', 'batch_planning'],
+                    limit: 99999
+                });
+
+                // ← YE BLOCK ADD KARO
+                const maMap = {};
+                (allMAs || []).forEach(ma => {
+                    if (!maMap[ma.batch_planning]) maMap[ma.batch_planning] = [];
+                    maMap[ma.batch_planning].push(ma);
+                });
+
+                let totalMAs = 0;
+                for (let b of bps) {
+                    b.linked_mas = maMap[b.name] || [];
+                    b.linked_mrs = Array(b.mr_count || 0).fill(null);
+                    totalMAs += b.linked_mas.length;
+                }
+                allBPs = bps;
+                filterTable();
+                updateStats(allBPs.length, totalMAs);
+                document.getElementById('stat-time').innerText = new Date().toLocaleTimeString();
+
+            } catch (e) {
+                document.getElementById('bp-table-div').innerHTML = `<div class="state-box" style="color:#f87171"><div class="icon">❌</div>${e.message}</div>`;
+            }
+        }
+
+        function getStatusBadge(workflow_state, docstatus) {
+            const state = workflow_state || (docstatus == 2 ? 'Cancelled' : docstatus == 0 ? 'Draft' : 'Approved');
+            if (state === 'Approved') return `<span class="badge badge-approved">Approved</span>`;
+            if (state === 'Draft') return `<span class="badge badge-draft">Draft</span>`;
+            if (state === 'Cancelled') return `<span class="badge badge-cancelled">Cancelled</span>`;
+            if (state === 'Rejected') return `<span class="badge badge-rejected">Rejected</span>`;
+            if (state.toLowerCase().includes('pending')) return `<span class="badge badge-pending">${state}</span>`;
+            return `<span class="badge badge-draft">${state}</span>`;
+        }
+
+        function getBatchTypeBadge(type) {
+            if (!type) return '<span class="badge badge-draft">N/A</span>';
+            if (type === 'Manufacturing') return `<span class="badge badge-mfg">${type}</span>`;
+            if (type === 'Process Development') return `<span class="badge badge-pd">${type}</span>`;
+            return `<span class="badge badge-trial">${type}</span>`;
+        }
+
+        function renderTable(bps) {
+            if (bps.length === 0) {
+                document.getElementById('bp-table-div').innerHTML = '<div class="state-box"><div class="icon">🔍</div>No batches match the selected filters.</div>';
+                return;
+            }
+
+            let html = `
+        <table>
+            <thead>
+                <tr>
+                    <th style="width:40px"><input type="checkbox" id="select-all" onchange="toggleAll(this)"></th>
+                    <th>BP Name</th>
+                    <th>Month</th>
+                    <th>Batch Type</th>
+                    <th>Finished Item</th>
+                    ${isAdmin ? '<th>Employee Function</th>' : ''}
+                    <th>Status</th>
+                    <th>Linked MAs</th>
+                    <th>Linked MRs</th>
+                    <th>Last Modified</th>
+                </tr>
+            </thead>
+            <tbody>`;
+
+            bps.forEach(bp => {
+                const modified = new Date(bp.modified).toLocaleDateString('en-IN');
+                const state = bp.workflow_state || (bp.docstatus == 2 ? 'Cancelled' : bp.docstatus == 0 ? 'Draft' : 'Approved');
+                const isCancelled = (bp.docstatus == 2 || state === 'Cancelled');
+                const maCount = bp.linked_mas.length;
+                const mrCount = bp.linked_mrs.length;
+
+                html += `
+            <tr class="${isCancelled ? 'cancelled-row' : ''}">
+                <td>
+                    ${!isCancelled
+                        ? `<input type="checkbox" class="bp-check" value="${bp.name}" onchange="updateCount()">`
+                        : `<input type="checkbox" disabled>`}
+                </td>
+                <td><a class="bp-link" href="/app/batches-planned/${bp.name}" target="_blank">${bp.name}</a></td>
+                <td style="color:var(--muted)">${bp.month || '—'}</td>
+                <td>${getBatchTypeBadge(bp.batch_type)}</td>
+                <td style="font-size:12px">${bp.finished_item || '—'}</td>
+                ${isAdmin ? `<td><span style="font-family:'DM Mono',monospace;font-size:11px;color:var(--purple)">${bp.employee_function || '—'}</span></td>` : ''}
+                <td>${getStatusBadge(bp.workflow_state, bp.docstatus)}</td>
+                <td>${maCount > 0 ? `<span class="linked-pill">📦 ${maCount} MA</span>` : '<span style="color:var(--muted);font-size:12px">None</span>'}</td>
+                <td>${mrCount > 0 ? `<span class="linked-pill">📋 ${mrCount} MR</span>` : '<span style="color:var(--muted);font-size:12px">None</span>'}</td>
+                <td style="color:var(--muted);font-size:12px">${modified}</td>
+            </tr>`;
+            });
+
+            html += '</tbody></table>';
+            document.getElementById('bp-table-div').innerHTML = html;
+        }
+
+        function toggleAll(cb) {
+            document.querySelectorAll('.bp-check').forEach(c => c.checked = cb.checked);
+            updateCount();
+        }
+
+        function updateCount() {
+            const count = document.querySelectorAll('.bp-check:checked').length;
+            document.getElementById('sel-count').innerText = count;
+            document.getElementById('stat-selected').innerText = count;
+            document.getElementById('cancel-btn').disabled = count === 0;
+        }
+
+        function updateStats(total, mas) {
+            document.getElementById('stat-total').innerText = total;
+            document.getElementById('stat-mas').innerText = mas;
+        }
+
+        function filterTable() {
+            const bp = document.getElementById('bp-filter').value.trim().toLowerCase();
+            const month = document.getElementById('month-filter').value;
+            const type = document.getElementById('type-filter').value;
+            const statusF = document.getElementById('status-filter').value;
+
+            const filtered = allBPs.filter(b => {
+                const matchBP = !bp || b.name.toLowerCase().includes(bp);
+                const matchMonth = !month || b.month === month;
+                const matchType = !type || b.batch_type === type;
+                const isCancelledDoc = (b.docstatus == 2);
+                const state = isCancelledDoc ? 'Cancelled' : (b.workflow_state || (b.docstatus == 0 ? 'Draft' : 'Approved'));
+                const matchStatus = !statusF ||
+                    (statusF === 'Cancelled' ? isCancelledDoc : state === statusF) ||
+                    (statusF === 'Pending Approval From Accounts' && state.toLowerCase().includes('pending'));
+                return matchBP && matchMonth && matchType && matchStatus;
+            });
+
+            renderTable(filtered);
+            let maSum = 0;
+            filtered.forEach(b => maSum += b.linked_mas.length);
+            document.getElementById('stat-total').innerText = filtered.length;
+            document.getElementById('stat-mas').innerText = maSum;
+        }
+
+        async function cancelSelected() {
+            const selected = [...document.querySelectorAll('.bp-check:checked')].map(c => c.value);
+            if (selected.length === 0) return;
+
+            if (!confirm(`⚠️ Are you sure you want to CANCEL ${selected.length} Batch Planning(s)?\n\nThis will also:\n- Cancel all linked Material Allocations\n- Release all reserved stock\n\nThis action cannot be undone!`)) return;
+
+            const btn = document.getElementById('cancel-btn');
+            btn.disabled = true;
+            btn.innerHTML = '⏳ Processing...';
+
+            let success = 0, failed = 0, errors = [];
+
+            for (let name of selected) {
+                try {
+                    const result = await frappe_call('custom_batch_planning.api.batch_cancellation.bp_cancel_with_workflow', { name });
+                    if (result && result.success) success++;
+                    else { failed++; errors.push(`${name}: ${result?.error || 'Unknown error'}`); }
+                } catch (e) {
+                    failed++;
+                    errors.push(`${name}: ${e.message}`);
+                }
+            }
+
+            let msg = `✅ Successfully cancelled: ${success}\n❌ Failed: ${failed}`;
+            if (errors.length > 0) msg += '\n\nErrors:\n' + errors.slice(0, 3).join('\n');
+            alert(msg);
+
+            btn.innerHTML = '❌ Cancel Selected (<span id="sel-count">0</span>)';
+            document.getElementById('stat-selected').innerText = '0';
+            document.getElementById('status-filter').value = 'Approved';
+            await loadBatches();
+        }
+
+        window.onload = init;
+    </script>
+</body>
+
+</html>

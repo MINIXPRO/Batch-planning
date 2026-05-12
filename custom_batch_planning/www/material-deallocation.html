@@ -1,0 +1,996 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Material De-Allocation</title>
+    <script>window.csrf_token = "{{ frappe.session.csrf_token }}";</script>
+    <link
+        href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap"
+        rel="stylesheet">
+    <style>
+        *,
+        *::before,
+        *::after {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        :root {
+            --bg: #f0faf4;
+            --bg2: #e8f5ee;
+            --surface: #ffffff;
+            --surface2: #f4fbf7;
+            --border: #c8e6d4;
+            --border2: #a8d5bc;
+            --text: #0d2b1a;
+            --text2: #1e4d32;
+            --muted: #5a8a70;
+            --muted2: #7aaa90;
+            --accent: #16a34a;
+            --accent-dark: #15803d;
+            --accent-light: #dcfce7;
+            --accent2: #059669;
+            --green: #22c55e;
+            --green-light: #bbf7d0;
+            --teal: #0d9488;
+            --red: #dc2626;
+            --red-light: #fee2e2;
+            --orange: #ea580c;
+            --yellow: #ca8a04;
+
+            /* Gradients */
+            --grad-hero: linear-gradient(135deg, #d1fae5 0%, #a7f3d0 40%, #6ee7b7 100%);
+            --grad-accent: linear-gradient(135deg, #16a34a, #059669);
+            --grad-card: linear-gradient(145deg, #ffffff, #f0fdf4);
+            --grad-stat: linear-gradient(135deg, #f0fdf4, #dcfce7);
+
+            --shadow-sm: 0 1px 3px rgba(22, 163, 74, 0.08), 0 1px 2px rgba(22, 163, 74, 0.06);
+            --shadow-md: 0 4px 16px rgba(22, 163, 74, 0.10), 0 2px 6px rgba(22, 163, 74, 0.06);
+            --shadow-lg: 0 12px 40px rgba(22, 163, 74, 0.14), 0 4px 12px rgba(22, 163, 74, 0.08);
+        }
+
+        body {
+            background: var(--bg);
+            background-image:
+                radial-gradient(ellipse at 20% 0%, rgba(134, 239, 172, 0.25) 0%, transparent 50%),
+                radial-gradient(ellipse at 80% 100%, rgba(110, 231, 183, 0.20) 0%, transparent 50%);
+            font-family: 'Plus Jakarta Sans', sans-serif;
+            color: var(--text);
+            min-height: 100vh;
+        }
+
+        /* ── HEADER ── */
+        .page-header {
+            background: var(--surface);
+            border-bottom: 1px solid var(--border);
+            padding: 0 32px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            height: 64px;
+            position: sticky;
+            top: 0;
+            z-index: 100;
+            box-shadow: 0 2px 12px rgba(22, 163, 74, 0.07);
+        }
+
+        .header-left {
+            display: flex;
+            align-items: center;
+            gap: 14px;
+        }
+
+        .header-icon {
+            width: 40px;
+            height: 40px;
+            background: var(--grad-accent);
+            border-radius: 10px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 18px;
+            box-shadow: 0 4px 12px rgba(22, 163, 74, 0.25);
+        }
+
+        .header-title {
+            font-size: 16px;
+            font-weight: 800;
+            color: var(--text);
+            letter-spacing: -0.3px;
+        }
+
+        .header-sub {
+            font-size: 11.5px;
+            color: var(--muted);
+            margin-top: 1px;
+        }
+
+        .header-right {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        /* EF Chip */
+        .ef-chip {
+            background: var(--surface2);
+            border: 1px solid var(--border);
+            border-radius: 10px;
+            padding: 8px 16px;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            box-shadow: var(--shadow-sm);
+        }
+
+        .ef-chip-item {
+            display: flex;
+            flex-direction: column;
+        }
+
+        .ef-chip-label {
+            font-size: 9.5px;
+            color: var(--muted2);
+            text-transform: uppercase;
+            letter-spacing: 0.7px;
+            font-weight: 700;
+        }
+
+        .ef-chip-value {
+            font-size: 13px;
+            font-weight: 700;
+            font-family: 'JetBrains Mono', monospace;
+            color: var(--accent);
+        }
+
+        .ef-chip-sep {
+            width: 1px;
+            height: 28px;
+            background: var(--border);
+        }
+
+        .ef-chip-head {
+            font-size: 13px;
+            font-weight: 600;
+            color: var(--text2);
+        }
+
+        .admin-badge {
+            background: var(--grad-accent);
+            color: #fff;
+            font-size: 11px;
+            font-weight: 700;
+            padding: 5px 13px;
+            border-radius: 20px;
+            letter-spacing: 0.4px;
+            box-shadow: 0 2px 8px rgba(22, 163, 74, 0.30);
+        }
+
+        /* ── MAIN ── */
+        .main {
+            padding: 28px 32px;
+            max-width: 1600px;
+            margin: 0 auto;
+        }
+
+        /* ── STATS ── */
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 16px;
+            margin-bottom: 22px;
+        }
+
+        .stat-card {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 14px;
+            padding: 20px 22px;
+            box-shadow: var(--shadow-sm);
+            position: relative;
+            overflow: hidden;
+            transition: box-shadow 0.2s, transform 0.2s;
+        }
+
+        .stat-card:hover {
+            box-shadow: var(--shadow-md);
+            transform: translateY(-1px);
+        }
+
+        .stat-card::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 3px;
+            background: var(--grad-accent);
+        }
+
+        .stat-label {
+            font-size: 10.5px;
+            color: var(--muted);
+            text-transform: uppercase;
+            letter-spacing: 0.7px;
+            font-weight: 700;
+            margin-bottom: 10px;
+        }
+
+        .stat-value {
+            font-size: 30px;
+            font-weight: 800;
+            font-family: 'JetBrains Mono', monospace;
+            letter-spacing: -1px;
+        }
+
+        /* ── FILTERS ── */
+        .filters-card {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 14px;
+            padding: 18px 22px;
+            margin-bottom: 22px;
+            box-shadow: var(--shadow-sm);
+        }
+
+        .filters-row {
+            display: flex;
+            gap: 12px;
+            align-items: flex-end;
+            flex-wrap: wrap;
+        }
+
+        .filter-group {
+            display: flex;
+            flex-direction: column;
+            gap: 5px;
+            flex: 1;
+            min-width: 140px;
+        }
+
+        .filter-group label {
+            font-size: 10.5px;
+            font-weight: 700;
+            color: var(--muted);
+            text-transform: uppercase;
+            letter-spacing: 0.6px;
+        }
+
+        .filter-group input,
+        .filter-group select {
+            background: var(--surface2);
+            border: 1.5px solid var(--border);
+            border-radius: 9px;
+            color: var(--text);
+            font-family: 'Plus Jakarta Sans', sans-serif;
+            font-size: 13px;
+            padding: 9px 13px;
+            height: 40px;
+            outline: none;
+            transition: border-color 0.2s, box-shadow 0.2s;
+        }
+
+        .filter-group input:focus,
+        .filter-group select:focus {
+            border-color: var(--accent);
+            box-shadow: 0 0 0 3px rgba(22, 163, 74, 0.12);
+        }
+
+        .filter-group input::placeholder {
+            color: var(--muted2);
+        }
+
+        .filter-group select option {
+            background: #fff;
+            color: var(--text);
+        }
+
+        .filter-group.admin-ef label {
+            color: var(--teal);
+        }
+
+        .filter-group.admin-ef select {
+            border-color: var(--teal);
+            color: var(--teal);
+        }
+
+        .admin-ef-wrap {
+            display: none;
+        }
+
+        /* ── BUTTONS ── */
+        .btn {
+            height: 40px;
+            border: none;
+            border-radius: 9px;
+            font-family: 'Plus Jakarta Sans', sans-serif;
+            font-size: 13px;
+            font-weight: 700;
+            cursor: pointer;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 6px;
+            padding: 0 20px;
+            transition: all 0.2s;
+            white-space: nowrap;
+        }
+
+        .btn-refresh {
+            background: var(--surface2);
+            color: var(--accent-dark);
+            border: 1.5px solid var(--border2);
+        }
+
+        .btn-refresh:hover {
+            background: var(--accent-light);
+            border-color: var(--accent);
+            box-shadow: 0 2px 8px rgba(22, 163, 74, 0.15);
+        }
+
+        .btn-dealloc {
+            background: var(--grad-accent);
+            color: #fff;
+            box-shadow: 0 3px 10px rgba(22, 163, 74, 0.30);
+        }
+
+        .btn-dealloc:hover:not(:disabled) {
+            box-shadow: 0 5px 18px rgba(22, 163, 74, 0.40);
+            transform: translateY(-1px);
+        }
+
+        .btn-dealloc:disabled {
+            background: var(--border);
+            color: var(--muted2);
+            cursor: not-allowed;
+            box-shadow: none;
+        }
+
+        /* ── TABLE ── */
+        .table-card {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 14px;
+            overflow: hidden;
+            box-shadow: var(--shadow-sm);
+        }
+
+        .table-wrap {
+            overflow-x: auto;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+
+        thead th {
+            background: var(--surface2);
+            font-size: 10.5px;
+            font-weight: 800;
+            color: var(--muted);
+            text-transform: uppercase;
+            letter-spacing: 0.7px;
+            padding: 13px 16px;
+            text-align: left;
+            border-bottom: 1.5px solid var(--border);
+            white-space: nowrap;
+        }
+
+        tbody td {
+            padding: 13px 16px;
+            font-size: 13px;
+            border-bottom: 1px solid #e8f5ee;
+            vertical-align: middle;
+        }
+
+        tbody tr:last-child td {
+            border-bottom: none;
+        }
+
+        tbody tr:hover td {
+            background: #f6fef9;
+        }
+
+        tbody tr.deallocated-row td {
+            opacity: 0.45;
+        }
+
+        tbody tr.deallocated-row input[type="checkbox"] {
+            pointer-events: none;
+            opacity: 0.3;
+        }
+
+        /* Items sub-table */
+        .items-row td {
+            background: transparent !important;
+            padding: 0 !important;
+        }
+
+        .items-sub {
+            background: #f6fef9;
+            border-top: 1px solid var(--border);
+            padding: 14px 20px;
+        }
+
+        .items-sub table {
+            background: transparent;
+        }
+
+        .items-sub thead th {
+            background: transparent;
+            font-size: 10px;
+            padding: 8px 10px;
+            color: var(--muted2);
+            border-bottom: 1px solid var(--border);
+        }
+
+        .items-sub tbody td {
+            padding: 8px 10px;
+            font-size: 12px;
+            border-bottom: 1px solid #e0f2e9;
+        }
+
+        /* ── BADGES ── */
+        .badge {
+            display: inline-flex;
+            align-items: center;
+            padding: 4px 11px;
+            border-radius: 20px;
+            font-size: 11px;
+            font-weight: 700;
+            white-space: nowrap;
+            letter-spacing: 0.2px;
+        }
+
+        .badge-allocated {
+            background: #dcfce7;
+            color: #15803d;
+            border: 1px solid #86efac;
+        }
+
+        .badge-draft {
+            background: #f1f5f9;
+            color: #64748b;
+            border: 1px solid #cbd5e1;
+        }
+
+        .badge-deallocated {
+            background: #f1f5f9;
+            color: #94a3b8;
+            border: 1px solid #e2e8f0;
+            text-decoration: line-through;
+        }
+
+        .items-btn {
+            background: var(--surface2);
+            border: 1.5px solid var(--border);
+            color: var(--accent-dark);
+            border-radius: 7px;
+            padding: 5px 12px;
+            font-size: 11.5px;
+            font-family: 'JetBrains Mono', monospace;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .items-btn:hover {
+            border-color: var(--accent);
+            background: var(--accent-light);
+            box-shadow: 0 2px 8px rgba(22, 163, 74, 0.12);
+        }
+
+        .ma-link {
+            color: var(--accent-dark);
+            text-decoration: none;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 12px;
+            font-weight: 600;
+        }
+
+        .ma-link:hover {
+            color: var(--accent);
+            text-decoration: underline;
+        }
+
+        /* ── STATE BOXES ── */
+        .state-box {
+            padding: 64px 20px;
+            text-align: center;
+            color: var(--muted);
+            font-size: 14px;
+        }
+
+        .state-box .icon {
+            font-size: 38px;
+            margin-bottom: 12px;
+        }
+
+        input[type="checkbox"] {
+            width: 16px;
+            height: 16px;
+            accent-color: var(--accent);
+            cursor: pointer;
+        }
+
+        ::-webkit-scrollbar {
+            width: 6px;
+            height: 6px;
+        }
+
+        ::-webkit-scrollbar-track {
+            background: var(--surface2);
+        }
+
+        ::-webkit-scrollbar-thumb {
+            background: var(--border2);
+            border-radius: 3px;
+        }
+
+        ::-webkit-scrollbar-thumb:hover {
+            background: var(--accent);
+        }
+    </style>
+</head>
+
+<body>
+
+    <!-- HEADER -->
+    <div class="page-header">
+        <div class="header-left">
+            <div class="header-icon">🔓</div>
+            <div>
+                <div class="header-title">Material De-Allocation</div>
+                <div class="header-sub">Manage and release reserved stock from batch allocations</div>
+            </div>
+        </div>
+        <div class="header-right">
+            <div class="ef-chip" id="ef-chip" style="display:none">
+                <div class="ef-chip-item">
+                    <span class="ef-chip-label">EF Code</span>
+                    <span class="ef-chip-value" id="ef-code-display">—</span>
+                </div>
+                <div class="ef-chip-sep"></div>
+                <div class="ef-chip-item">
+                    <span class="ef-chip-label">Function Head</span>
+                    <span class="ef-chip-head" id="ef-head-display">—</span>
+                </div>
+            </div>
+            <div class="admin-badge" id="admin-badge" style="display:none">👑 Administrator</div>
+        </div>
+    </div>
+
+    <!-- MAIN -->
+    <div class="main">
+
+        <!-- STATS -->
+        <div class="stats-grid">
+            <div class="stat-card">
+                <div class="stat-label">Total Allocated MAs</div>
+                <div class="stat-value" id="stat-total" style="color:var(--accent)">—</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-label">Total Batches</div>
+                <div class="stat-value" id="stat-batches" style="color:var(--teal)">—</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-label">Selected</div>
+                <div class="stat-value" id="stat-selected" style="color:var(--orange)">0</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-label">Last Refreshed</div>
+                <div class="stat-value" id="stat-time" style="color:var(--muted);font-size:14px;margin-top:6px">—</div>
+            </div>
+        </div>
+
+        <!-- FILTERS -->
+        <div class="filters-card">
+            <div class="filters-row">
+
+                <!-- Admin EF dropdown -->
+                <div class="filter-group admin-ef admin-ef-wrap" id="admin-ef-wrap">
+                    <label>👑 Employee Function</label>
+                    <select id="admin-ef-select" onchange="onAdminEFChange()">
+                        <option value="">All Employee Functions</option>
+                    </select>
+                </div>
+
+                <div class="filter-group">
+                    <label>Batch Planning</label>
+                    <input type="text" id="bp-filter" placeholder="Search BP name..." oninput="filterTable()">
+                </div>
+                <div class="filter-group">
+                    <label>Warehouse</label>
+                    <input type="text" id="wh-filter" placeholder="Search warehouse..." oninput="filterTable()">
+                </div>
+                <div class="filter-group">
+                    <label>Month</label>
+                    <select id="month-filter" onchange="filterTable()">
+                        <option value="">All Months</option>
+                        <option>January</option>
+                        <option>February</option>
+                        <option>March</option>
+                        <option>April</option>
+                        <option>May</option>
+                        <option>June</option>
+                        <option>July</option>
+                        <option>August</option>
+                        <option>September</option>
+                        <option>October</option>
+                        <option>November</option>
+                        <option>December</option>
+                    </select>
+                </div>
+                <div class="filter-group">
+                    <label>Status</label>
+                    <select id="status-filter" onchange="filterTable()">
+                        <option value="">All Status</option>
+                        <option value="Draft">Draft</option>
+                        <option value="Allocated" selected>Allocated</option>
+                        <option value="Deallocated">Deallocated</option>
+                    </select>
+                </div>
+                <div>
+                    <button class="btn btn-refresh" onclick="loadMAs()">🔄 Refresh</button>
+                </div>
+                <div>
+                    <button class="btn btn-dealloc" id="dealloc-btn" onclick="deallocateSelected()" disabled>
+                        🔓 Deallocate (<span id="sel-count">0</span>)
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- TABLE -->
+        <div class="table-card">
+            <div class="table-wrap">
+                <div id="ma-table-div">
+                    <div class="state-box">
+                        <div class="icon">⏳</div>Loading allocations...
+                    </div>
+                </div>
+            </div>
+        </div>
+
+    </div>
+
+    <script>
+        let allMAs = [];
+        let isAdmin = false;
+        let currentEF = '';
+
+        function getCsrfToken() {
+            let token = window.csrf_token || '';
+            if (!token || token === 'None') {
+                document.cookie.split(';').forEach(c => {
+                    c = c.trim();
+                    if (c.startsWith('csrf_token=')) token = decodeURIComponent(c.split('=')[1]);
+                });
+            }
+            return token;
+        }
+
+        async function frappe_call(method, args) {
+            const res = await fetch(`/api/method/${method}`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-Frappe-CSRF-Token': getCsrfToken(),
+                    'X-Requested-With': 'XMLHttpRequest',
+                    'Accept': 'application/json'
+                },
+                credentials: 'same-origin',
+                body: JSON.stringify(args)
+            });
+            const data = await res.json();
+            if (data.exc) throw new Error(data.exc);
+            return data.message;
+        }
+
+        async function init() {
+            try {
+                const session = await frappe_call('frappe.auth.get_logged_user', {});
+                isAdmin = (session === 'Administrator');
+            } catch (e) { }
+
+            const params = new URLSearchParams(window.location.search);
+            currentEF = params.get('employee_function') || '';
+
+            if (isAdmin) {
+                document.getElementById('admin-badge').style.display = 'flex';
+                document.getElementById('admin-ef-wrap').style.display = 'flex';
+                await loadAdminEFList();
+                if (currentEF) {
+                    document.getElementById('admin-ef-select').value = currentEF;
+                    await fetchAndShowEFHeader(currentEF);
+                }
+            } else {
+                if (currentEF) {
+                    document.getElementById('ef-chip').style.display = 'flex';
+                    await fetchAndShowEFHeader(currentEF);
+                }
+            }
+
+            await loadMAs();
+        }
+
+        async function loadAdminEFList() {
+            try {
+                const efs = await frappe_call('frappe.client.get_list', {
+                    doctype: 'Employee Function',
+                    fields: ['name', 'function_name'],
+                    limit: 500,
+                    order_by: 'name asc'
+                });
+                const sel = document.getElementById('admin-ef-select');
+                (efs || []).forEach(ef => {
+                    const opt = document.createElement('option');
+                    opt.value = ef.name;
+                    opt.textContent = `${ef.name} — ${ef.function_name || ''}`;
+                    sel.appendChild(opt);
+                });
+            } catch (e) { }
+        }
+
+        async function fetchAndShowEFHeader(efName) {
+            try {
+                const ef = await frappe_call('frappe.client.get', {
+                    doctype: 'Employee Function',
+                    name: efName
+                });
+                document.getElementById('ef-code-display').textContent = ef.name || efName;
+
+                let headName = ef.function_head || '—';
+                try {
+                    const user = await frappe_call('frappe.client.get_value', {
+                        doctype: 'User',
+                        filters: { name: ef.function_head },
+                        fieldname: 'full_name'
+                    });
+                    if (user && user.full_name) headName = user.full_name;
+                } catch (e) { }
+
+                document.getElementById('ef-head-display').textContent = headName;
+                document.getElementById('ef-chip').style.display = 'flex';
+            } catch (e) { }
+        }
+
+        async function onAdminEFChange() {
+            const selected = document.getElementById('admin-ef-select').value;
+            currentEF = selected;
+            if (selected) {
+                await fetchAndShowEFHeader(selected);
+            } else {
+                document.getElementById('ef-chip').style.display = 'none';
+            }
+            await loadMAs();
+        }
+
+        async function loadMAs() {
+            document.getElementById('ma-table-div').innerHTML = '<div class="state-box"><div class="icon">⏳</div>Loading allocations...</div>';
+
+            try {
+                const mas = await frappe_call(
+                    'custom_batch_planning.api.deallocation.get_all_material_allocations',
+                    { employee_function: currentEF || null }
+                );
+
+                if (!mas || mas.length === 0) {
+                    document.getElementById('ma-table-div').innerHTML = '<div class="state-box"><div class="icon">✅</div>No allocations found.</div>';
+                    updateStats(0, 0);
+                    return;
+                }
+
+                const maNames = mas.map(m => m.name);
+                const allItems = await frappe_call('custom_batch_planning.api.deallocation.get_ma_items', { ma_names: maNames });
+
+                const itemMap = {};
+                (allItems || []).forEach(item => {
+                    if (!itemMap[item.parent]) itemMap[item.parent] = [];
+                    itemMap[item.parent].push(item);
+                });
+
+                mas.forEach(ma => { ma.items = itemMap[ma.name] || []; });
+
+                allMAs = mas;
+                filterTable();
+                updateStats(mas.length, [...new Set(mas.map(m => m.batch_planning))].length);
+                document.getElementById('stat-time').innerText = new Date().toLocaleTimeString();
+
+            } catch (e) {
+                document.getElementById('ma-table-div').innerHTML = `<div class="state-box" style="color:var(--red)"><div class="icon">❌</div>${e.message}</div>`;
+            }
+        }
+
+        function getStatusBadge(ma) {
+            let status;
+            if (ma.docstatus == 2) status = 'Deallocated';
+            else if (ma.custom_allocation_status) status = ma.custom_allocation_status;
+            else if (ma.docstatus == 0) status = 'Draft';
+            else status = 'Allocated';
+
+            if (status === 'Allocated') return `<span class="badge badge-allocated">● Allocated</span>`;
+            if (status === 'Deallocated') return `<span class="badge badge-deallocated">Deallocated</span>`;
+            if (status === 'Draft') return `<span class="badge badge-draft">Draft</span>`;
+            return `<span class="badge badge-draft">${status}</span>`;
+        }
+
+        function renderTable(mas) {
+            if (mas.length === 0) {
+                document.getElementById('ma-table-div').innerHTML = '<div class="state-box"><div class="icon">🔍</div>No allocations match the selected filters.</div>';
+                return;
+            }
+
+            let html = `
+            <table>
+                <thead>
+                    <tr>
+                        <th style="width:40px"><input type="checkbox" id="select-all" onchange="toggleAll(this)"></th>
+                        <th>MA Name</th>
+                        <th>Batch Planning</th>
+                        <th>Warehouse</th>
+                        ${isAdmin ? '<th>Employee Function</th>' : ''}
+                        <th>Status</th>
+                        <th>Last Modified</th>
+                        <th>Items</th>
+                    </tr>
+                </thead>
+                <tbody>`;
+
+            mas.forEach((ma, i) => {
+                const modified = new Date(ma.modified).toLocaleDateString('en-IN');
+                const isDeallocated = (ma.docstatus == 2 || ma.custom_allocation_status === 'Deallocated');
+
+                html += `
+                <tr class="${isDeallocated ? 'deallocated-row' : ''}">
+                    <td>
+                        ${!isDeallocated
+                        ? `<input type="checkbox" class="ma-check" value="${ma.name}" onchange="updateCount()">`
+                        : `<input type="checkbox" disabled>`}
+                    </td>
+                    <td><a class="ma-link" href="/app/material-allocation/${ma.name}" target="_blank">${ma.name}</a></td>
+                    <td><span style="font-family:'JetBrains Mono',monospace;font-size:11.5px;color:var(--muted)">${ma.batch_planning || '—'}</span></td>
+                    <td style="font-size:12px;color:var(--muted)">${ma.warehouse || '—'}</td>
+                    ${isAdmin ? `<td><span style="font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--teal)">${currentEF || '—'}</span></td>` : ''}
+                    <td>${getStatusBadge(ma)}</td>
+                    <td style="color:var(--muted2);font-size:12px">${modified}</td>
+                    <td>
+                        <button class="items-btn" onclick="toggleItems('items-${i}')">
+                            📦 ${ma.items.length} items
+                        </button>
+                    </td>
+                </tr>
+                <tr id="items-${i}" style="display:none" class="items-row">
+                    <td colspan="${isAdmin ? 8 : 7}">
+                        <div class="items-sub">
+                            <table>
+                                <thead>
+                                    <tr>
+                                        <th>Item Code</th>
+                                        <th>Item Name</th>
+                                        <th>UOM</th>
+                                        <th>Qty Required</th>
+                                        <th>Stock Available</th>
+                                        <th>Allocate Qty</th>
+                                        <th>Shortage</th>
+                                    </tr>
+                                </thead>
+                                <tbody>`;
+
+                if (ma.items && ma.items.length > 0) {
+                    ma.items.forEach(item => {
+                        html += `
+                        <tr>
+                            <td style="font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--accent-dark)">${item.item_code}</td>
+                            <td>${item.item_name || '—'}</td>
+                            <td style="color:var(--muted2)">${item.uom || '—'}</td>
+                            <td style="font-weight:600">${item.quantity_required || 0}</td>
+                            <td>${item.stock_available || 0}</td>
+                            <td style="color:var(--accent-dark);font-weight:700">${item.allocate_qty || 0}</td>
+                            <td style="color:${item.shortage > 0 ? 'var(--red)' : 'var(--accent)'};font-weight:600">${item.shortage || 0}</td>
+                        </tr>`;
+                    });
+                } else {
+                    html += `<tr><td colspan="7" style="text-align:center;color:var(--muted2)">No items</td></tr>`;
+                }
+
+                html += `</tbody></table></div></td></tr>`;
+            });
+
+            html += '</tbody></table>';
+            document.getElementById('ma-table-div').innerHTML = html;
+        }
+
+        function toggleItems(id) {
+            const row = document.getElementById(id);
+            row.style.display = row.style.display === 'none' ? 'table-row' : 'none';
+        }
+
+        function toggleAll(cb) {
+            document.querySelectorAll('.ma-check').forEach(c => c.checked = cb.checked);
+            updateCount();
+        }
+
+        function updateCount() {
+            const count = document.querySelectorAll('.ma-check:checked').length;
+            document.getElementById('sel-count').innerText = count;
+            document.getElementById('stat-selected').innerText = count;
+            document.getElementById('dealloc-btn').disabled = count === 0;
+        }
+
+        function updateStats(total, batches) {
+            document.getElementById('stat-total').innerText = total;
+            document.getElementById('stat-batches').innerText = batches;
+        }
+
+        function filterTable() {
+            const bp = document.getElementById('bp-filter').value.trim().toLowerCase();
+            const wh = document.getElementById('wh-filter').value.trim().toLowerCase();
+            const month = document.getElementById('month-filter').value;
+            const statusF = document.getElementById('status-filter').value;
+
+            const filtered = allMAs.filter(ma => {
+                const matchBP = !bp || (ma.batch_planning || '').toLowerCase().includes(bp);
+                const matchWH = !wh || (ma.warehouse || '').toLowerCase().includes(wh);
+                const matchMonth = !month || (ma.batch_planning || '').toLowerCase().includes(month.substring(0, 3).toLowerCase());
+
+                let state;
+                if (ma.docstatus == 2) state = 'Deallocated';
+                else if (ma.custom_allocation_status) state = ma.custom_allocation_status;
+                else if (ma.docstatus == 0) state = 'Draft';
+                else state = 'Allocated';
+
+                const matchStatus = !statusF || state === statusF;
+                return matchBP && matchWH && matchMonth && matchStatus;
+            });
+
+            renderTable(filtered);
+            const uniqueBPs = [...new Set(filtered.map(m => m.batch_planning))].length;
+            document.getElementById('stat-total').innerText = filtered.length;
+            document.getElementById('stat-batches').innerText = uniqueBPs;
+        }
+
+        async function deallocateSelected() {
+            const selected = [...document.querySelectorAll('.ma-check:checked')].map(c => c.value);
+            if (selected.length === 0) return;
+
+            if (!confirm(`Are you sure you want to deallocate ${selected.length} Material Allocation(s)?\nThis will release the reserved stock.`)) return;
+
+            const btn = document.getElementById('dealloc-btn');
+            btn.disabled = true;
+            btn.innerHTML = '⏳ Processing...';
+
+            let success = 0, failed = 0, errors = [];
+
+            for (let name of selected) {
+                try {
+                    await frappe_call('frappe.model.workflow.apply_workflow', {
+                        doc: { doctype: 'Material Allocation', name: name },
+                        action: 'Cancel'
+                    });
+                    success++;
+                } catch (e) {
+                    failed++;
+                    errors.push(`${name}: ${e.message}`);
+                }
+            }
+
+            let msg = `✅ Successfully deallocated: ${success}\n❌ Failed: ${failed}`;
+            if (errors.length > 0) msg += '\n\nErrors:\n' + errors.slice(0, 3).join('\n');
+            alert(msg);
+
+            btn.innerHTML = '🔓 Deallocate (<span id="sel-count">0</span>)';
+            document.getElementById('stat-selected').innerText = '0';
+            document.getElementById('status-filter').value = 'Allocated';
+            await loadMAs();
+        }
+
+        window.onload = init;
+    </script>
+</body>
+
+</html>

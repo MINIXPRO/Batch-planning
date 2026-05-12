@@ -1,0 +1,965 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Batch Planning Dashboard</title>
+    <script>
+        window.csrf_token = "{{ frappe.session.csrf_token }}";
+    </script>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link
+        href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700;800&family=DM+Mono:wght@400;500&display=swap"
+        rel="stylesheet">
+    <style>
+        :root {
+            --blue: #1a6ef5;
+            --blue-dk: #1252c4;
+            --blue-lt: #e8f0fe;
+            --green: #12a05c;
+            --green-lt: #e6f7ef;
+            --indigo: #3d52d5;
+            --indigo-lt: #eaecfb;
+            --purple: #7c3aed;
+            --purple-lt: #f0eafd;
+            --teal: #0b8c7a;
+            --teal-lt: #e0f5f2;
+            --red: #d63b3b;
+            --red-lt: #fdecec;
+            --orange: #e06c1a;
+            --orange-lt: #fff0e4;
+            --brown: #7a4f3a;
+            --brown-lt: #f3ede9;
+            --bg: #f0f3f8;
+            --surface: #ffffff;
+            --border: #e4e8ef;
+            --text: #1a1f2e;
+            --muted: #6b7280;
+            --radius: 10px;
+            --shadow: 0 1px 4px rgba(0, 0, 0, .06), 0 4px 16px rgba(0, 0, 0, .04);
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            background: var(--bg);
+            font-family: 'DM Sans', sans-serif;
+            color: var(--text);
+            font-size: 13.5px;
+        }
+
+        /* ── Header ── */
+        .header {
+            background: linear-gradient(120deg, #0f3fa8 0%, #1a6ef5 60%, #3d8ef8 100%);
+            padding: 22px 32px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 12px;
+        }
+
+        .header-left h4 {
+            color: #fff;
+            font-size: 20px;
+            font-weight: 800;
+            letter-spacing: -.3px;
+            margin-bottom: 2px;
+        }
+
+        .header-left p {
+            color: rgba(255, 255, 255, .72);
+            font-size: 12.5px;
+            margin: 0;
+        }
+
+        .header-badge {
+            background: rgba(255, 255, 255, .15);
+            border: 1px solid rgba(255, 255, 255, .25);
+            color: #fff;
+            padding: 6px 14px;
+            border-radius: 20px;
+            font-size: 12px;
+            font-weight: 600;
+            white-space: nowrap;
+        }
+
+        /* ── Stat Grid ── */
+        .page-wrap {
+            padding: 24px 28px;
+        }
+
+        .stat-grid {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 14px;
+            margin-bottom: 22px;
+        }
+
+        @media (max-width:1100px) {
+            .stat-grid {
+                grid-template-columns: repeat(4, 1fr);
+            }
+        }
+
+        @media (max-width:768px) {
+            .stat-grid {
+                grid-template-columns: repeat(2, 1fr);
+            }
+        }
+
+        @media (max-width:480px) {
+            .stat-grid {
+                grid-template-columns: 1fr 1fr;
+            }
+        }
+
+        .stat-card {
+            background: var(--surface);
+            border-radius: var(--radius);
+            padding: 16px 18px;
+            box-shadow: var(--shadow);
+            display: flex;
+            align-items: center;
+            gap: 14px;
+            border-left: 3px solid transparent;
+            transition: transform .15s, box-shadow .15s;
+        }
+
+        .stat-card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 22px rgba(0, 0, 0, .1);
+        }
+
+        .stat-icon {
+            width: 42px;
+            height: 42px;
+            border-radius: 10px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 19px;
+            flex-shrink: 0;
+        }
+
+        .stat-info .label {
+            font-size: 10.5px;
+            color: var(--muted);
+            text-transform: uppercase;
+            letter-spacing: .7px;
+            font-weight: 700;
+            margin-bottom: 3px;
+        }
+
+        .stat-info .value {
+            font-size: 26px;
+            font-weight: 800;
+            line-height: 1;
+        }
+
+        /* color variants */
+        .sc-blue {
+            border-left-color: var(--blue);
+        }
+
+        .sc-blue .stat-icon {
+            background: var(--blue-lt);
+        }
+
+        .sc-blue .value {
+            color: var(--blue);
+        }
+
+        .sc-green {
+            border-left-color: var(--green);
+        }
+
+        .sc-green .stat-icon {
+            background: var(--green-lt);
+        }
+
+        .sc-green .value {
+            color: var(--green);
+        }
+
+        .sc-indigo {
+            border-left-color: var(--indigo);
+        }
+
+        .sc-indigo .stat-icon {
+            background: var(--indigo-lt);
+        }
+
+        .sc-indigo .value {
+            color: var(--indigo);
+        }
+
+        .sc-purple {
+            border-left-color: var(--purple);
+        }
+
+        .sc-purple .stat-icon {
+            background: var(--purple-lt);
+        }
+
+        .sc-purple .value {
+            color: var(--purple);
+        }
+
+        .sc-teal {
+            border-left-color: var(--teal);
+        }
+
+        .sc-teal .stat-icon {
+            background: var(--teal-lt);
+        }
+
+        .sc-teal .value {
+            color: var(--teal);
+        }
+
+        .sc-red {
+            border-left-color: var(--red);
+        }
+
+        .sc-red .stat-icon {
+            background: var(--red-lt);
+        }
+
+        .sc-red .value {
+            color: var(--red);
+        }
+
+        .sc-orange {
+            border-left-color: var(--orange);
+        }
+
+        .sc-orange .stat-icon {
+            background: var(--orange-lt);
+        }
+
+        .sc-orange .value {
+            color: var(--orange);
+        }
+
+        .sc-brown {
+            border-left-color: var(--brown);
+        }
+
+        .sc-brown .stat-icon {
+            background: var(--brown-lt);
+        }
+
+        .sc-brown .value {
+            color: var(--brown);
+        }
+
+        /* ── Filter Card ── */
+        .filter-card {
+            background: var(--surface);
+            border-radius: var(--radius);
+            padding: 20px 22px;
+            box-shadow: var(--shadow);
+            margin-bottom: 20px;
+        }
+
+        .filter-card .filter-title {
+            font-size: 11px;
+            font-weight: 700;
+            letter-spacing: .6px;
+            text-transform: uppercase;
+            color: var(--muted);
+            margin-bottom: 14px;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .filter-grid {
+            display: grid;
+            grid-template-columns: 2fr 1.2fr 1.3fr 1.2fr 1.2fr 1.2fr 1.2fr 1.2fr auto;
+            gap: 10px;
+            align-items: end;
+        }
+
+        @media (max-width:1200px) {
+            .filter-grid {
+                grid-template-columns: repeat(4, 1fr);
+            }
+        }
+
+        @media (max-width:768px) {
+            .filter-grid {
+                grid-template-columns: repeat(2, 1fr);
+            }
+        }
+
+        .filter-group label {
+            display: block;
+            font-size: 10.5px;
+            font-weight: 700;
+            color: var(--muted);
+            text-transform: uppercase;
+            letter-spacing: .5px;
+            margin-bottom: 5px;
+        }
+
+        .filter-group input,
+        .filter-group select {
+            width: 100%;
+            padding: 8px 10px;
+            border: 1.5px solid var(--border);
+            border-radius: 8px;
+            font-size: 13px;
+            font-family: 'DM Sans', sans-serif;
+            color: var(--text);
+            background: #fff;
+            outline: none;
+            transition: border-color .2s, box-shadow .2s;
+            appearance: none;
+            -webkit-appearance: none;
+            background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%236b7280' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E");
+            background-repeat: no-repeat;
+            background-position: right 10px center;
+            padding-right: 28px;
+        }
+
+        .filter-group input {
+            background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='13' height='13' viewBox='0 0 24 24' fill='none' stroke='%236b7280' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Ccircle cx='11' cy='11' r='8'/%3E%3Cline x1='21' y1='21' x2='16.65' y2='16.65'/%3E%3C/svg%3E");
+            background-repeat: no-repeat;
+            background-position: right 10px center;
+            padding-right: 32px;
+        }
+
+        .filter-group input:focus,
+        .filter-group select:focus {
+            border-color: var(--blue);
+            box-shadow: 0 0 0 3px rgba(26, 110, 245, .1);
+        }
+
+        .btn-refresh {
+            background: linear-gradient(135deg, var(--blue), var(--blue-dk));
+            color: #fff;
+            border: none;
+            border-radius: 8px;
+            padding: 8px 18px;
+            font-size: 13px;
+            font-weight: 700;
+            font-family: 'DM Sans', sans-serif;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            white-space: nowrap;
+            transition: opacity .2s, transform .1s;
+            height: 36px;
+        }
+
+        .btn-refresh:hover {
+            opacity: .9;
+            transform: translateY(-1px);
+        }
+
+        /* ── Table ── */
+        .table-card {
+            background: var(--surface);
+            border-radius: var(--radius);
+            box-shadow: var(--shadow);
+            overflow: hidden;
+            margin-bottom: 28px;
+        }
+
+        .table-card table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+
+        .table-card thead th {
+            background: linear-gradient(90deg, #0f3fa8, #1a6ef5);
+            color: #fff;
+            font-size: 11.5px;
+            font-weight: 700;
+            letter-spacing: .4px;
+            text-transform: uppercase;
+            padding: 12px 10px;
+            text-align: center;
+            white-space: nowrap;
+            border: none;
+        }
+
+        .table-card thead th:nth-child(1),
+        .table-card thead th:nth-child(2),
+        .table-card thead th:nth-child(6) {
+            text-align: left;
+        }
+
+        .table-card tbody td {
+            font-size: 13px;
+            vertical-align: middle;
+            text-align: center;
+            padding: 10px 10px;
+            border-bottom: 1px solid #f0f3f8;
+            color: var(--text);
+        }
+
+        .table-card tbody td:nth-child(1),
+        .table-card tbody td:nth-child(2),
+        .table-card tbody td:nth-child(6) {
+            text-align: left;
+        }
+
+        .table-card tbody tr:last-child td {
+            border-bottom: none;
+        }
+
+        .table-card tbody tr:hover {
+            background: #f5f8ff;
+        }
+
+        .row-num {
+            color: #bbb;
+            font-size: 11px;
+            font-family: 'DM Mono', monospace;
+        }
+
+        /* ── Badges ── */
+        .badge {
+            display: inline-flex;
+            align-items: center;
+            padding: 3px 9px;
+            border-radius: 20px;
+            font-size: 11px;
+            font-weight: 700;
+            white-space: nowrap;
+        }
+
+        .badge-approved {
+            background: var(--green-lt);
+            color: var(--green);
+        }
+
+        .badge-draft {
+            background: #f0f3f8;
+            color: #6b7280;
+        }
+
+        .badge-pending {
+            background: var(--orange-lt);
+            color: var(--orange);
+        }
+
+        .badge-rejected {
+            background: var(--red-lt);
+            color: var(--red);
+        }
+
+        .badge-cancelled {
+            background: #f0f3f8;
+            color: #9ca3af;
+        }
+
+        .badge-mfg {
+            background: var(--blue-lt);
+            color: var(--blue);
+        }
+
+        .badge-pd {
+            background: var(--orange-lt);
+            color: var(--orange);
+        }
+
+        .badge-trial {
+            background: var(--purple-lt);
+            color: var(--purple);
+        }
+
+        .cnt {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            min-width: 28px;
+            padding: 3px 8px;
+            border-radius: 20px;
+            font-size: 12px;
+            font-weight: 700;
+            font-family: 'DM Mono', monospace;
+        }
+
+        .cnt-zero {
+            background: #f3f4f6;
+            color: #d1d5db;
+        }
+
+        .cnt-green {
+            background: var(--green-lt);
+            color: var(--green);
+        }
+
+        .cnt-blue {
+            background: var(--blue-lt);
+            color: var(--blue);
+        }
+
+        .cnt-purple {
+            background: var(--purple-lt);
+            color: var(--purple);
+        }
+
+        .cnt-teal {
+            background: var(--teal-lt);
+            color: var(--teal);
+        }
+
+        .cnt-orange {
+            background: var(--orange-lt);
+            color: var(--orange);
+        }
+
+        .cnt-red {
+            background: var(--red-lt);
+            color: var(--red);
+        }
+
+        .loading-state {
+            text-align: center;
+            padding: 60px 20px;
+            color: var(--muted);
+            font-size: 14px;
+        }
+
+        a {
+            color: var(--blue);
+            text-decoration: none;
+            font-weight: 600;
+        }
+
+        a:hover {
+            text-decoration: underline;
+        }
+
+        .table-footer {
+            padding: 10px 16px;
+            border-top: 1px solid var(--border);
+            font-size: 12px;
+            color: var(--muted);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        /* scrollbar */
+        .table-scroll {
+            overflow-x: auto;
+        }
+
+        .table-scroll::-webkit-scrollbar {
+            height: 5px;
+        }
+
+        .table-scroll::-webkit-scrollbar-track {
+            background: #f0f3f8;
+        }
+
+        .table-scroll::-webkit-scrollbar-thumb {
+            background: #c4cde0;
+            border-radius: 10px;
+        }
+    </style>
+</head>
+
+<body>
+
+    <!-- Header -->
+    <div class="header">
+        <div class="header-left">
+            <h4>📊 Batch Planning Dashboard</h4>
+            <p>Real-time overview of all planned batches — MR, PO, GRN, PI, MA, Material Issue status</p>
+        </div>
+        <div class="header-badge" id="last-updated">Loading…</div>
+    </div>
+
+    <div class="page-wrap">
+
+        <!-- Stat Cards -->
+        <div class="stat-grid">
+            <div class="stat-card sc-blue">
+                <div class="stat-icon">🗂️</div>
+                <div class="stat-info">
+                    <div class="label">Total Batches</div>
+                    <div class="value" id="stat-total">-</div>
+                </div>
+            </div>
+            <div class="stat-card sc-green">
+                <div class="stat-icon">📋</div>
+                <div class="stat-info">
+                    <div class="label">Total MRs</div>
+                    <div class="value" id="stat-mr">-</div>
+                </div>
+            </div>
+            <div class="stat-card sc-indigo">
+                <div class="stat-icon">🛒</div>
+                <div class="stat-info">
+                    <div class="label">Total POs</div>
+                    <div class="value" id="stat-po">-</div>
+                </div>
+            </div>
+            <div class="stat-card sc-purple">
+                <div class="stat-icon">📦</div>
+                <div class="stat-info">
+                    <div class="label">Total GRNs</div>
+                    <div class="value" id="stat-grn">-</div>
+                </div>
+            </div>
+            <div class="stat-card sc-teal">
+                <div class="stat-icon">🧾</div>
+                <div class="stat-info">
+                    <div class="label">Total PIs</div>
+                    <div class="value" id="stat-pi">-</div>
+                </div>
+            </div>
+            <div class="stat-card sc-red">
+                <div class="stat-icon">🔗</div>
+                <div class="stat-info">
+                    <div class="label">Total MAs</div>
+                    <div class="value" id="stat-ma">-</div>
+                </div>
+            </div>
+            <div class="stat-card sc-orange">
+                <div class="stat-icon">🏭</div>
+                <div class="stat-info">
+                    <div class="label">Material Issued</div>
+                    <div class="value" id="stat-issues">-</div>
+                </div>
+            </div>
+            <div class="stat-card sc-brown">
+                <div class="stat-icon">⏳</div>
+                <div class="stat-info">
+                    <div class="label">PO Pending</div>
+                    <div class="value" id="stat-po-pending">-</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Filters -->
+        <div class="filter-card">
+            <div class="filter-title">🔍 Filter Batches</div>
+            <div class="filter-grid">
+
+                <div class="filter-group">
+                    <label>Planned Batches</label>
+                    <input type="text" id="bp-filter" placeholder="Search batch…" oninput="debounceFilter()">
+                </div>
+
+                <div class="filter-group">
+                    <label>Month</label>
+                    <select id="month-filter" onchange="filterTable()">
+                        <option value="">All Months</option>
+                        <option>January</option>
+                        <option>February</option>
+                        <option>March</option>
+                        <option>April</option>
+                        <option>May</option>
+                        <option>June</option>
+                        <option>July</option>
+                        <option>August</option>
+                        <option>September</option>
+                        <option>October</option>
+                        <option>November</option>
+                        <option>December</option>
+                    </select>
+                </div>
+
+                <div class="filter-group">
+                    <label>Batch Type</label>
+                    <select id="type-filter" onchange="filterTable()">
+                        <option value="">All Types</option>
+                        <option value="Manufacturing">Manufacturing</option>
+                        <option value="Process Development">Process Development</option>
+                        <option value="Machine Trial">Machine Trial</option>
+                    </select>
+                </div>
+
+                <div class="filter-group">
+                    <label>Status</label>
+                    <select id="status-filter" onchange="filterTable()">
+                        <option value="">All Status</option>
+                        <option value="Draft">Draft</option>
+                        <option value="Pending Approval">Pending Approval</option>
+                        <option value="Approved">Approved</option>
+                        <option value="Rejected">Rejected</option>
+                        <option value="Cancelled">Cancelled</option>
+                    </select>
+                </div>
+
+                <div class="filter-group">
+                    <label>MR Status</label>
+                    <select id="mr-filter" onchange="filterTable()">
+                        <option value="">All</option>
+                        <option value="pending">Pending Only</option>
+                        <option value="completed">Completed Only</option>
+                    </select>
+                </div>
+
+                <div class="filter-group">
+                    <label>PO Status</label>
+                    <select id="po-filter" onchange="filterTable()">
+                        <option value="">All</option>
+                        <option value="pending">Pending Only</option>
+                        <option value="completed">Completed Only</option>
+                    </select>
+                </div>
+
+                <div class="filter-group">
+                    <label>PR Status</label>
+                    <select id="pr-filter" onchange="filterTable()">
+                        <option value="">All</option>
+                        <option value="pending">Pending Only</option>
+                        <option value="completed">Completed Only</option>
+                    </select>
+                </div>
+
+                <div class="filter-group">
+                    <label>PI Status</label>
+                    <select id="pi-filter" onchange="filterTable()">
+                        <option value="">All</option>
+                        <option value="pending">Pending Only</option>
+                        <option value="completed">Completed Only</option>
+                    </select>
+                </div>
+
+                <div class="filter-group">
+                    <label>&nbsp;</label>
+                    <button class="btn-refresh" onclick="loadDashboard()">🔄 Refresh</button>
+                </div>
+
+            </div>
+        </div>
+
+        <!-- Table -->
+        <div class="table-card">
+            <div id="dashboard-table">
+                <div class="loading-state">⏳ Loading dashboard…</div>
+            </div>
+        </div>
+
+    </div>
+
+    <script>
+        let allData = [];
+        let debounceTimer;
+
+        function getCsrfToken() {
+            let token = window.csrf_token || '';
+            if (!token || token === 'None') {
+                document.cookie.split(';').forEach(c => {
+                    c = c.trim();
+                    if (c.startsWith('csrf_token=')) token = decodeURIComponent(c.split('=')[1]);
+                });
+            }
+            return token;
+        }
+
+        async function frappe_call(method, args) {
+            const res = await fetch(`/api/method/${method}`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-Frappe-CSRF-Token': getCsrfToken(),
+                    'X-Requested-With': 'XMLHttpRequest',
+                    'Accept': 'application/json'
+                },
+                credentials: 'same-origin',
+                body: JSON.stringify(args)
+            });
+            const data = await res.json();
+            if (data.exc) throw new Error(data.exc);
+            return data.message;
+        }
+
+        async function loadDashboard() {
+            document.getElementById('dashboard-table').innerHTML = '<div class="loading-state">⏳ Fetching data…</div>';
+            document.getElementById('last-updated').textContent = 'Loading…';
+            try {
+                // API call — method must be whitelisted in your frappe app
+                // Expected fields per row:
+                //   name, month, batch_type, status, finished_item,
+                //   mr_count, po_count, grn_count, pi_count, ma_count,
+                //   pr_pending (MR→PO not converted), po_pending (PO delivery pending),
+                //   pr_pending2 (PR not submitted), pi_pending (PI not submitted),
+                //   issue_count
+                const data = await frappe_call('custom_batch_planning.api.dashboard.get_batch_dashboard_data', {});
+                if (!data || data.length === 0) {
+                    document.getElementById('dashboard-table').innerHTML = '<div class="loading-state">✅ No batches found.</div>';
+                    updateTopStats([]);
+                } else {
+                    allData = data;
+                    filterTable();
+                }
+                const now = new Date();
+                document.getElementById('last-updated').textContent =
+                    'Updated ' + now.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' });
+            } catch (e) {
+                document.getElementById('dashboard-table').innerHTML =
+                    `<div class="loading-state" style="color:#d63b3b">❌ Error: ${e.message}</div>`;
+                document.getElementById('last-updated').textContent = 'Error';
+            }
+        }
+
+        function debounceFilter() {
+            clearTimeout(debounceTimer);
+            debounceTimer = setTimeout(filterTable, 300);
+        }
+
+        function filterTable() {
+            const bp = document.getElementById('bp-filter').value.trim().toLowerCase();
+            const month = document.getElementById('month-filter').value;
+            const type = document.getElementById('type-filter').value;
+            const statusF = document.getElementById('status-filter').value;
+            const mrF = document.getElementById('mr-filter').value;
+            const poF = document.getElementById('po-filter').value;
+            const prF = document.getElementById('pr-filter').value;
+            const piF = document.getElementById('pi-filter').value;
+
+            const filtered = allData.filter(b => {
+                // bp search against name field (frappe document name)
+                if (bp && !b.name.toLowerCase().includes(bp)) return false;
+                if (month && b.month !== month) return false;
+                if (type && b.batch_type !== type) return false;
+                if (statusF && b.status !== statusF) return false;
+                // MR pending = pr_pending (MRs not converted to PO)
+                if (mrF === 'pending' && !(b.pr_pending > 0)) return false;
+                if (mrF === 'completed' && b.pr_pending > 0) return false;
+                // PO pending = po_pending (PO delivery pending)
+                if (poF === 'pending' && !(b.po_pending > 0)) return false;
+                if (poF === 'completed' && b.po_pending > 0) return false;
+                // PR pending = pr_pending2 (PRs not submitted)
+                if (prF === 'pending' && !(b.pr_pending2 > 0)) return false;
+                if (prF === 'completed' && b.pr_pending2 > 0) return false;
+                // PI pending
+                if (piF === 'pending' && !(b.pi_pending > 0)) return false;
+                if (piF === 'completed' && b.pi_pending > 0) return false;
+                return true;
+            });
+
+            renderTable(filtered);
+            updateTopStats(filtered);
+        }
+
+        // ── Badge helpers ──────────────────────────────────────
+        function cnt(val, cls) {
+            if (!val || val === 0) return `<span class="cnt cnt-zero">0</span>`;
+            return `<span class="cnt ${cls}">${val}</span>`;
+        }
+
+        function typeBadge(t) {
+            if (!t || t === '-') return `<span class="cnt cnt-zero">—</span>`;
+            if (t === 'Manufacturing') return `<span class="badge badge-mfg">Manufacturing</span>`;
+            if (t === 'Process Development') return `<span class="badge badge-pd">Process Dev.</span>`;
+            return `<span class="badge badge-trial">${t}</span>`;
+        }
+
+        function statusBadge(s) {
+            const map = {
+                'Approved': 'badge-approved',
+                'Draft': 'badge-draft',
+                'Pending Approval': 'badge-pending',
+                'Rejected': 'badge-rejected',
+                'Cancelled': 'badge-cancelled',
+            };
+            return `<span class="badge ${map[s] || 'badge-draft'}">${s || '—'}</span>`;
+        }
+
+        // ── Render ─────────────────────────────────────────────
+        function renderTable(data) {
+            if (!data.length) {
+                document.getElementById('dashboard-table').innerHTML =
+                    '<div class="loading-state">No records match the selected filters.</div>';
+                return;
+            }
+
+            let rows = '';
+            data.forEach((r, i) => {
+                rows += `
+                <tr>
+                    <td><span class="row-num">${i + 1}</span></td>
+                    <td><a href="/app/batches-planned/${r.name}" target="_blank">${r.name}</a></td>
+                    <td>${r.month || '—'}</td>
+                    <td>${typeBadge(r.batch_type)}</td>
+                    <td>${statusBadge(r.status)}</td>
+                    <td style="max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${r.finished_item || ''}">${r.finished_item || '—'}</td>
+                    <td>${cnt(r.mr_count, 'cnt-green')}</td>
+                    <td>${cnt(r.po_count, 'cnt-blue')}</td>
+                    <td>${cnt(r.grn_count, 'cnt-purple')}</td>
+                    <td>${cnt(r.pi_count, 'cnt-teal')}</td>
+                    <td>${cnt(r.ma_count, 'cnt-green')}</td>
+                    <td>${cnt(r.pr_pending, 'cnt-orange')}</td>
+                    <td>${cnt(r.po_pending, 'cnt-red')}</td>
+                    <td>${cnt(r.pr_pending2, 'cnt-orange')}</td>
+                    <td>${cnt(r.pi_pending, 'cnt-red')}</td>
+                    <td>${cnt(r.issue_count || 0, 'cnt-orange')}</td>
+                </tr>`;
+            });
+
+            document.getElementById('dashboard-table').innerHTML = `
+            <div class="table-scroll">
+            <table>
+                <thead>
+                    <tr>
+                        <th>#</th>
+                        <th>BP Name</th>
+                        <th>Month</th>
+                        <th>Batch Type</th>
+                        <th>Status</th>
+                        <th>Finished Item</th>
+                        <th title="Material Requests">MRs</th>
+                        <th title="Purchase Orders">POs</th>
+                        <th title="Goods Receipt Notes">GRNs</th>
+                        <th title="Purchase Invoices">PIs</th>
+                        <th title="Material Allocations">MAs</th>
+                        <th title="MRs not yet converted to PO">MR Pending</th>
+                        <th title="PO delivery pending">PO Pending</th>
+                        <th title="Purchase Receipts not submitted">PR Pending</th>
+                        <th title="Purchase Invoices not submitted">PI Pending</th>
+                        <th title="Material Issues from Store">Issues</th>
+                    </tr>
+                </thead>
+                <tbody>${rows}</tbody>
+            </table>
+            </div>
+            <div class="table-footer">
+                <span>Showing <strong>${data.length}</strong> of <strong>${allData.length}</strong> batches</span>
+                <span style="font-size:11px;color:#bbb;">Fields: name · month · batch_type · status · finished_item · mr_count · po_count · grn_count · pi_count · ma_count · pr_pending · po_pending · pr_pending2 · pi_pending · issue_count</span>
+            </div>`;
+        }
+
+        function updateTopStats(data) {
+            let mr = 0, po = 0, grn = 0, pi = 0, ma = 0, issues = 0, poPending = 0;
+            for (const r of data) {
+                mr += r.mr_count || 0;
+                po += r.po_count || 0;
+                grn += r.grn_count || 0;
+                pi += r.pi_count || 0;
+                ma += r.ma_count || 0;
+                issues += r.issue_count || 0;
+                poPending += r.po_pending || 0;
+            }
+            document.getElementById('stat-total').textContent = data.length;
+            document.getElementById('stat-mr').textContent = mr;
+            document.getElementById('stat-po').textContent = po;
+            document.getElementById('stat-grn').textContent = grn;
+            document.getElementById('stat-pi').textContent = pi;
+            document.getElementById('stat-ma').textContent = ma;
+            document.getElementById('stat-issues').textContent = issues;
+            document.getElementById('stat-po-pending').textContent = poPending;
+        }
+
+        window.onload = () => loadDashboard();
+    </script>
+
+</body>
+
+</html>

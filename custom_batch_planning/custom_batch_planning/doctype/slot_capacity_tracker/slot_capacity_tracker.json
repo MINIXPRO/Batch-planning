@@ -1,0 +1,126 @@
+{
+ "actions": [],
+ "allow_rename": 1,
+ "creation": "2026-05-01 15:23:28.029361",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "field_order": [
+  "details_section",
+  "slot_master",
+  "employee_function",
+  "employee_headname",
+  "column_break_azag",
+  "batch_start_date",
+  "batch_end_date",
+  "slot_capacity_detail_section",
+  "column_break_vizd",
+  "slot_capacity_detail",
+  "project",
+  "project_name"
+ ],
+ "fields": [
+  {
+   "fieldname": "details_section",
+   "fieldtype": "Section Break",
+   "label": "Details"
+  },
+  {
+   "fieldname": "slot_master",
+   "fieldtype": "Data",
+   "label": "Slot Master"
+  },
+  {
+   "fieldname": "employee_function",
+   "fieldtype": "Data",
+   "label": "Employee Function"
+  },
+  {
+   "fieldname": "employee_headname",
+   "fieldtype": "Data",
+   "label": "Employee HeadName"
+  },
+  {
+   "fieldname": "column_break_azag",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "batch_start_date",
+   "fieldtype": "Date",
+   "label": "Batch Start Date"
+  },
+  {
+   "fieldname": "batch_end_date",
+   "fieldtype": "Date",
+   "label": "Batch End Date"
+  },
+  {
+   "fieldname": "slot_capacity_detail_section",
+   "fieldtype": "Section Break",
+   "label": "Slot Capacity Detail"
+  },
+  {
+   "fieldname": "slot_capacity_detail",
+   "fieldtype": "Table",
+   "label": "Slot Capacity Detail",
+   "options": "Slot Capacity Detail"
+  },
+  {
+   "fieldname": "column_break_vizd",
+   "fieldtype": "Column Break",
+   "read_only": 1
+  },
+  {
+   "fieldname": "project",
+   "fieldtype": "Link",
+   "label": "Project ID",
+   "options": "Project"
+  },
+  {
+   "fetch_from": "project.project_name",
+   "fieldname": "project_name",
+   "fieldtype": "Data",
+   "label": "Project Name",
+   "read_only": 1
+  }
+ ],
+ "grid_page_length": 50,
+ "index_web_pages_for_search": 1,
+ "links": [],
+ "modified": "2026-05-04 22:46:00.631511",
+ "modified_by": "Administrator",
+ "module": "Custom Batch Planning",
+ "name": "Slot Capacity Tracker",
+ "naming_rule": "By script",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "All",
+   "share": 1,
+   "write": 1
+  },
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "System Manager",
+   "share": 1,
+   "write": 1
+  }
+ ],
+ "row_format": "Dynamic",
+ "rows_threshold_for_grid_search": 20,
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": []
+}

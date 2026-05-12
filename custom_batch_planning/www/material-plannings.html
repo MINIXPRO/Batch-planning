@@ -1,0 +1,1781 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Multi-Batch Material Planning</title>
+    <script>window.csrf_token = "{{ frappe.session.csrf_token }}";</script>
+    <link
+        href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap"
+        rel="stylesheet">
+    <style>
+        :root {
+            --bg: #f0f4f8;
+            --surface: #ffffff;
+            --surface2: #f7f9fc;
+            --surface3: #eef2f7;
+            --border: rgba(0, 0, 0, 0.08);
+            --border2: rgba(0, 0, 0, 0.13);
+            --blue: #2563eb;
+            --blue-dim: rgba(37, 99, 235, 0.08);
+            --blue-glow: rgba(37, 99, 235, 0.18);
+            --green: #16a34a;
+            --green-dim: rgba(22, 163, 74, 0.09);
+            --red: #dc2626;
+            --red-dim: rgba(220, 38, 38, 0.08);
+            --orange: #ea580c;
+            --orange-dim: rgba(234, 88, 12, 0.09);
+            --purple: #7c3aed;
+            --purple-dim: rgba(124, 58, 237, 0.08);
+            --yellow: #ca8a04;
+            --yellow-dim: rgba(202, 138, 4, 0.09);
+            --teal: #0d9488;
+            --teal-dim: rgba(13, 148, 136, 0.09);
+            --text: #0f172a;
+            --text-dim: #475569;
+            --text-faint: #94a3b8;
+            --radius: 14px;
+            --radius-sm: 9px;
+            --shadow: 0 1px 4px rgba(0, 0, 0, 0.07), 0 4px 16px rgba(0, 0, 0, 0.05);
+            --shadow-md: 0 2px 8px rgba(0, 0, 0, 0.08), 0 8px 24px rgba(0, 0, 0, 0.07);
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            background: var(--bg);
+            font-family: 'Plus Jakarta Sans', sans-serif;
+            color: var(--text);
+            min-height: 100vh;
+        }
+
+        /* ── Header ── */
+        .header {
+            background: var(--surface);
+            border-bottom: 1px solid var(--border2);
+            padding: 6px 20px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 6px;
+            height: 48px;
+            box-shadow: 0 1px 0 rgba(0, 0, 0, 0.06);
+            position: sticky;
+            top: 0;
+            z-index: 100;
+        }
+
+        .header-left {
+            display: flex;
+            align-items: center;
+            gap: 9px;
+        }
+
+        .header-logo {
+            width: 28px;
+            height: 28px;
+            background: linear-gradient(135deg, var(--blue), #1d4ed8);
+            border-radius: 6px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 14px;
+            flex-shrink: 0;
+        }
+
+        .header-left h1 {
+            font-size: 14px;
+            font-weight: 800;
+            color: var(--text);
+            letter-spacing: -0.2px;
+        }
+
+        .header-left p {
+            font-size: 10px;
+            color: var(--text-faint);
+            margin-top: 1px;
+            font-weight: 500;
+        }
+
+        .header-right {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        /* ── EF Search in Header ── */
+        .ef-search-wrap {
+            position: relative;
+            display: flex;
+            align-items: center;
+            gap: 7px;
+        }
+
+        .ef-search-input {
+            background: var(--surface);
+            border: 1px solid var(--border2);
+            border-radius: 30px;
+            padding: 5px 14px 5px 32px;
+            font-size: 12px;
+            font-weight: 600;
+            color: var(--text);
+            font-family: 'Plus Jakarta Sans', sans-serif;
+            width: 240px;
+            outline: none;
+            transition: border-color 0.2s, box-shadow 0.2s;
+        }
+
+        .ef-search-input:focus {
+            border-color: var(--blue);
+            box-shadow: 0 0 0 3px var(--blue-dim);
+        }
+
+        .ef-search-input::placeholder {
+            color: var(--text-faint);
+        }
+
+        .ef-search-icon {
+            position: absolute;
+            left: 11px;
+            font-size: 13px;
+            pointer-events: none;
+        }
+
+        .ef-selected-badge {
+            display: none;
+            align-items: center;
+            gap: 5px;
+            background: var(--blue-dim);
+            border: 1px solid rgba(37, 99, 235, 0.25);
+            border-radius: 30px;
+            padding: 3px 10px 3px 8px;
+            font-size: 11px;
+            font-weight: 700;
+            color: var(--blue);
+            max-width: 220px;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .ef-clear-btn {
+            background: none;
+            border: none;
+            cursor: pointer;
+            font-size: 13px;
+            color: var(--blue);
+            padding: 0;
+            line-height: 1;
+            flex-shrink: 0;
+        }
+
+        /* ── EF Dropdown ── */
+        .ef-dropdown {
+            display: none;
+            position: absolute;
+            top: calc(100% + 6px);
+            right: 0;
+            width: 320px;
+            background: var(--surface);
+            border: 1px solid var(--border2);
+            border-radius: var(--radius);
+            box-shadow: var(--shadow-md);
+            z-index: 999;
+            overflow: hidden;
+        }
+
+        .ef-dropdown.open {
+            display: block;
+        }
+
+        .ef-dropdown-list {
+            max-height: 280px;
+            overflow-y: auto;
+        }
+
+        .ef-dropdown-list::-webkit-scrollbar {
+            width: 4px;
+        }
+
+        .ef-dropdown-list::-webkit-scrollbar-thumb {
+            background: var(--border2);
+            border-radius: 4px;
+        }
+
+        .ef-option {
+            display: flex;
+            flex-direction: column;
+            padding: 10px 14px;
+            cursor: pointer;
+            border-bottom: 1px solid var(--border);
+            transition: background 0.1s;
+        }
+
+        .ef-option:hover {
+            background: var(--blue-dim);
+        }
+
+        .ef-option:last-child {
+            border-bottom: none;
+        }
+
+        .ef-option-head {
+            font-size: 12px;
+            font-weight: 700;
+            color: var(--text);
+        }
+
+        .ef-option-name {
+            font-size: 10px;
+            font-weight: 600;
+            color: var(--blue);
+            font-family: 'JetBrains Mono', monospace;
+            margin-top: 2px;
+        }
+
+        .ef-no-results {
+            padding: 16px 14px;
+            font-size: 12px;
+            color: var(--text-faint);
+            text-align: center;
+        }
+
+        /* ── Stat Grid ── */
+        .stat-grid {
+            display: grid;
+            grid-template-columns: repeat(5, 1fr);
+            gap: 12px;
+            padding: 16px 24px 0;
+        }
+
+        @media (max-width: 1000px) {
+            .stat-grid {
+                grid-template-columns: repeat(3, 1fr);
+            }
+        }
+
+        @media (max-width: 600px) {
+            .stat-grid {
+                grid-template-columns: repeat(2, 1fr);
+            }
+        }
+
+        .stat-card {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            padding: 14px 16px;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            box-shadow: var(--shadow);
+            position: relative;
+            overflow: hidden;
+            transition: box-shadow 0.2s, transform 0.2s;
+        }
+
+        .stat-card:hover {
+            box-shadow: var(--shadow-md);
+            transform: translateY(-1px);
+        }
+
+        .stat-card::after {
+            content: '';
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            height: 3px;
+            border-radius: 0 0 14px 14px;
+        }
+
+        .stat-card.s-blue::after {
+            background: var(--blue);
+        }
+
+        .stat-card.s-green::after {
+            background: var(--green);
+        }
+
+        .stat-card.s-red::after {
+            background: var(--red);
+        }
+
+        .stat-card.s-orange::after {
+            background: var(--orange);
+        }
+
+        .stat-card.s-teal::after {
+            background: var(--teal);
+        }
+
+        .stat-icon {
+            width: 38px;
+            height: 38px;
+            border-radius: 10px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 18px;
+            flex-shrink: 0;
+        }
+
+        .si-blue {
+            background: var(--blue-dim);
+        }
+
+        .si-green {
+            background: var(--green-dim);
+        }
+
+        .si-red {
+            background: var(--red-dim);
+        }
+
+        .si-orange {
+            background: var(--orange-dim);
+        }
+
+        .si-teal {
+            background: var(--teal-dim);
+        }
+
+        .stat-label {
+            font-size: 9px;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            color: var(--text-faint);
+            margin-bottom: 4px;
+        }
+
+        .stat-value {
+            font-size: 26px;
+            font-weight: 800;
+            line-height: 1;
+            font-family: 'JetBrains Mono', monospace;
+        }
+
+        .sv-blue {
+            color: var(--blue);
+        }
+
+        .sv-green {
+            color: var(--green);
+        }
+
+        .sv-red {
+            color: var(--red);
+        }
+
+        .sv-orange {
+            color: var(--orange);
+        }
+
+        .sv-teal {
+            color: var(--teal);
+        }
+
+        /* ── Main Layout ── */
+        .main-layout {
+            display: grid;
+            grid-template-columns: 270px 1fr;
+            gap: 14px;
+            padding: 14px 24px 28px;
+        }
+
+        @media (max-width: 900px) {
+            .main-layout {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        /* ── Left Panel ── */
+        .left-panel {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+            position: sticky;
+            top: 48px;
+            max-height: calc(100vh - 64px);
+            box-shadow: var(--shadow);
+        }
+
+        .panel-header {
+            padding: 12px 14px;
+            background: linear-gradient(135deg, #eff6ff, #f0f9ff);
+            border-bottom: 1px solid var(--border);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+
+        .panel-title {
+            font-size: 12px;
+            font-weight: 700;
+            color: var(--text);
+            display: flex;
+            align-items: center;
+            gap: 7px;
+        }
+
+        .selected-pill {
+            background: var(--blue);
+            color: #fff;
+            font-size: 10px;
+            font-weight: 800;
+            padding: 2px 8px;
+            border-radius: 20px;
+            font-family: 'JetBrains Mono', monospace;
+            min-width: 22px;
+            text-align: center;
+        }
+
+        /* ── Filters ── */
+        .panel-filters {
+            padding: 10px;
+            border-bottom: 1px solid var(--border);
+            display: flex;
+            flex-direction: column;
+            gap: 7px;
+            background: var(--surface2);
+        }
+
+        .filter-row {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 7px;
+        }
+
+        .filter-select,
+        .filter-input {
+            background: var(--surface);
+            border: 1px solid var(--border2);
+            border-radius: var(--radius-sm);
+            padding: 7px 9px;
+            font-size: 11px;
+            font-weight: 600;
+            color: var(--text);
+            font-family: 'Plus Jakarta Sans', sans-serif;
+            width: 100%;
+            transition: border-color 0.2s, box-shadow 0.2s;
+        }
+
+        .filter-select:focus,
+        .filter-input:focus {
+            outline: none;
+            border-color: var(--blue);
+            box-shadow: 0 0 0 3px var(--blue-dim);
+        }
+
+        /* ── BP List ── */
+        .bp-list {
+            flex: 1;
+            overflow-y: auto;
+            padding: 4px 0;
+        }
+
+        .bp-list::-webkit-scrollbar {
+            width: 4px;
+        }
+
+        .bp-list::-webkit-scrollbar-track {
+            background: transparent;
+        }
+
+        .bp-list::-webkit-scrollbar-thumb {
+            background: var(--border2);
+            border-radius: 4px;
+        }
+
+        .bp-item {
+            display: flex;
+            align-items: center;
+            padding: 9px 12px;
+            gap: 9px;
+            cursor: pointer;
+            border-bottom: 1px solid var(--border);
+            transition: background 0.12s;
+            user-select: none;
+        }
+
+        .bp-item:hover {
+            background: var(--surface2);
+        }
+
+        .bp-item.selected {
+            background: #eff6ff;
+        }
+
+        .bp-item input[type="checkbox"] {
+            width: 14px;
+            height: 14px;
+            accent-color: var(--blue);
+            cursor: pointer;
+            flex-shrink: 0;
+        }
+
+        .bp-info {
+            flex: 1;
+            min-width: 0;
+        }
+
+        .bp-name {
+            font-size: 11px;
+            font-weight: 700;
+            color: var(--blue);
+            font-family: 'JetBrains Mono', monospace;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .bp-sub {
+            font-size: 10px;
+            color: var(--text-faint);
+            font-weight: 500;
+            margin-top: 1px;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .type-badge {
+            font-size: 9px;
+            font-weight: 800;
+            padding: 2px 6px;
+            border-radius: 20px;
+            flex-shrink: 0;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .tb-mfg {
+            background: #dbeafe;
+            color: #1d4ed8;
+            border: 1px solid #bfdbfe;
+        }
+
+        .tb-pd {
+            background: #ffedd5;
+            color: #c2410c;
+            border: 1px solid #fed7aa;
+        }
+
+        .tb-trial {
+            background: #f3e8ff;
+            color: #6d28d9;
+            border: 1px solid #e9d5ff;
+        }
+
+        /* ── Panel Footer ── */
+        .panel-footer {
+            padding: 9px 10px;
+            border-top: 1px solid var(--border);
+            display: flex;
+            flex-direction: column;
+            gap: 7px;
+            background: var(--surface2);
+        }
+
+        .footer-btns {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 7px;
+        }
+
+        .btn-sel-all {
+            background: #eff6ff;
+            color: var(--blue);
+            border: 1px solid #bfdbfe;
+            border-radius: var(--radius-sm);
+            padding: 7px;
+            font-size: 11px;
+            font-weight: 700;
+            cursor: pointer;
+            font-family: 'Plus Jakarta Sans', sans-serif;
+            transition: background 0.15s, transform 0.1s;
+        }
+
+        .btn-sel-all:hover {
+            background: #dbeafe;
+            transform: translateY(-1px);
+        }
+
+        .btn-clear {
+            background: #fef2f2;
+            color: var(--red);
+            border: 1px solid #fecaca;
+            border-radius: var(--radius-sm);
+            padding: 7px;
+            font-size: 11px;
+            font-weight: 700;
+            cursor: pointer;
+            font-family: 'Plus Jakarta Sans', sans-serif;
+            transition: background 0.15s, transform 0.1s;
+        }
+
+        .btn-clear:hover {
+            background: #fee2e2;
+            transform: translateY(-1px);
+        }
+
+        .btn-generate {
+            width: 100%;
+            background: linear-gradient(135deg, #2563eb, #1d4ed8);
+            color: #fff;
+            border: none;
+            border-radius: var(--radius-sm);
+            padding: 11px;
+            font-size: 12px;
+            font-weight: 700;
+            cursor: pointer;
+            font-family: 'Plus Jakarta Sans', sans-serif;
+            transition: opacity 0.2s, transform 0.1s, box-shadow 0.2s;
+            box-shadow: 0 3px 12px rgba(37, 99, 235, 0.35);
+        }
+
+        .btn-generate:hover {
+            opacity: 0.92;
+            transform: translateY(-1px);
+            box-shadow: 0 6px 18px rgba(37, 99, 235, 0.4);
+        }
+
+        /* ── Right Panel ── */
+        .right-panel {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+            box-shadow: var(--shadow);
+            min-width: 0;
+        }
+
+        .right-header {
+            padding: 12px 16px;
+            border-bottom: 1px solid var(--border);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            flex-wrap: wrap;
+            gap: 8px;
+            background: linear-gradient(135deg, #f8fafc, #f0f9ff);
+        }
+
+        .right-title {
+            font-size: 13px;
+            font-weight: 800;
+            color: var(--text);
+        }
+
+        .right-actions {
+            display: flex;
+            gap: 7px;
+            flex-wrap: wrap;
+        }
+
+        .btn-shortage {
+            background: #fef2f2;
+            color: var(--red);
+            border: 1px solid #fecaca;
+            border-radius: var(--radius-sm);
+            padding: 6px 12px;
+            font-size: 11px;
+            font-weight: 700;
+            cursor: pointer;
+            font-family: 'Plus Jakarta Sans', sans-serif;
+            transition: all 0.15s;
+        }
+
+        .btn-shortage:hover {
+            background: #fee2e2;
+        }
+
+        .btn-shortage.active {
+            background: var(--red);
+            color: #fff;
+            border-color: var(--red);
+            box-shadow: 0 2px 8px rgba(220, 38, 38, 0.3);
+        }
+
+        .btn-export-shortage {
+            background: #fff7ed;
+            color: var(--orange);
+            border: 1px solid #fed7aa;
+            border-radius: var(--radius-sm);
+            padding: 6px 12px;
+            font-size: 11px;
+            font-weight: 700;
+            cursor: pointer;
+            font-family: 'Plus Jakarta Sans', sans-serif;
+            transition: background 0.15s;
+        }
+
+        .btn-export-shortage:hover {
+            background: #ffedd5;
+        }
+
+        .btn-export {
+            background: #f0fdf4;
+            color: var(--green);
+            border: 1px solid #bbf7d0;
+            border-radius: var(--radius-sm);
+            padding: 6px 12px;
+            font-size: 11px;
+            font-weight: 700;
+            cursor: pointer;
+            font-family: 'Plus Jakarta Sans', sans-serif;
+            transition: background 0.15s;
+        }
+
+        .btn-export:hover {
+            background: #dcfce7;
+        }
+
+        /* ── Tags strip ── */
+        .tags-strip {
+            padding: 8px 14px;
+            border-bottom: 1px solid var(--border);
+            display: flex;
+            flex-wrap: wrap;
+            gap: 5px;
+            min-height: 38px;
+            align-items: center;
+            background: var(--surface2);
+        }
+
+        .bp-tag {
+            background: #dbeafe;
+            color: #1d4ed8;
+            border: 1px solid #bfdbfe;
+            padding: 2px 8px;
+            border-radius: 20px;
+            font-size: 10px;
+            font-weight: 700;
+            font-family: 'JetBrains Mono', monospace;
+        }
+
+        .no-sel-text {
+            font-size: 11px;
+            color: var(--text-faint);
+            font-weight: 500;
+        }
+
+        /* ── Search ── */
+        .search-bar {
+            padding: 8px 14px;
+            border-bottom: 1px solid var(--border);
+            background: var(--surface);
+        }
+
+        .search-input {
+            width: 100%;
+            background: var(--surface2);
+            border: 1px solid var(--border2);
+            border-radius: var(--radius-sm);
+            padding: 8px 12px;
+            font-size: 12px;
+            font-weight: 500;
+            color: var(--text);
+            font-family: 'Plus Jakarta Sans', sans-serif;
+            transition: border-color 0.2s, box-shadow 0.2s;
+        }
+
+        .search-input:focus {
+            outline: none;
+            border-color: var(--blue);
+            box-shadow: 0 0 0 3px var(--blue-dim);
+            background: var(--surface);
+        }
+
+        .search-input::placeholder {
+            color: var(--text-faint);
+        }
+
+        /* ── Table ── */
+        .table-wrap {
+            overflow-x: auto;
+            flex: 1;
+        }
+
+        .table-wrap::-webkit-scrollbar {
+            height: 5px;
+        }
+
+        .table-wrap::-webkit-scrollbar-track {
+            background: var(--surface2);
+        }
+
+        .table-wrap::-webkit-scrollbar-thumb {
+            background: var(--border2);
+            border-radius: 4px;
+        }
+
+        .data-table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 11px;
+        }
+
+        .data-table thead th {
+            background: var(--surface3);
+            color: var(--text-dim);
+            font-size: 9px;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.7px;
+            padding: 10px 10px;
+            text-align: center;
+            white-space: nowrap;
+            border-bottom: 2px solid var(--border2);
+            position: sticky;
+            top: 0;
+            z-index: 2;
+        }
+
+        /* Column group headers */
+        .data-table thead tr.group-row th {
+            padding: 5px 4px;
+            font-size: 8px;
+            font-weight: 800;
+            letter-spacing: 1px;
+            border-bottom: 1px solid var(--border2);
+            position: sticky;
+            top: 0;
+            z-index: 2;
+        }
+
+        .data-table thead tr.col-row th {
+            position: sticky;
+            top: 27px;
+            z-index: 2;
+        }
+
+        .th-group-info {
+            background: #f8fafc;
+            color: var(--text-dim);
+        }
+
+        .th-group-stock {
+            background: #eff6ff;
+            color: #1e40af;
+            border-left: 2px solid #bfdbfe;
+            border-right: 2px solid #bfdbfe;
+        }
+
+        .th-group-flow {
+            background: #f0fdf4;
+            color: #166534;
+            border-left: 2px solid #bbf7d0;
+            border-right: 2px solid #bbf7d0;
+        }
+
+        .th-group-result {
+            background: #fef3c7;
+            color: #92400e;
+            border-left: 2px solid #fde68a;
+            border-right: 2px solid #fde68a;
+        }
+
+        .th-group-status {
+            background: #f5f3ff;
+            color: #5b21b6;
+        }
+
+        .data-table thead th:first-child,
+        .data-table thead th:nth-child(2),
+        .data-table thead th:nth-child(3),
+        .data-table thead th:nth-child(4) {
+            text-align: left;
+        }
+
+        .data-table tbody td {
+            padding: 9px 10px;
+            text-align: center;
+            border-bottom: 1px solid var(--border);
+            vertical-align: middle;
+            font-weight: 500;
+        }
+
+        .data-table tbody td:nth-child(1),
+        .data-table tbody td:nth-child(2),
+        .data-table tbody td:nth-child(3),
+        .data-table tbody td:nth-child(4) {
+            text-align: left;
+        }
+
+        .data-table tbody tr {
+            transition: background 0.1s;
+        }
+
+        .data-table tbody tr:hover {
+            background: var(--surface2);
+        }
+
+        .data-table tbody tr.shortage-row {
+            background: #fff5f5;
+        }
+
+        .data-table tbody tr.shortage-row:hover {
+            background: #fee2e2;
+        }
+
+        /* Column group borders in body */
+        .td-stock-start {
+            border-left: 2px solid #bfdbfe !important;
+        }
+
+        .td-stock-end {
+            border-right: 2px solid #bfdbfe !important;
+        }
+
+        .td-flow-start {
+            border-left: 2px solid #bbf7d0 !important;
+        }
+
+        .td-flow-end {
+            border-right: 2px solid #bbf7d0 !important;
+        }
+
+        .td-result-start {
+            border-left: 2px solid #fde68a !important;
+        }
+
+        .td-result-end {
+            border-right: 2px solid #fde68a !important;
+        }
+
+        .row-num {
+            color: var(--text-faint);
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 10px;
+        }
+
+        .item-code-link {
+            color: var(--blue);
+            text-decoration: none;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 10px;
+            font-weight: 700;
+            background: #dbeafe;
+            padding: 2px 7px;
+            border-radius: 4px;
+            white-space: nowrap;
+        }
+
+        .item-code-link:hover {
+            background: #bfdbfe;
+        }
+
+        .item-name {
+            color: var(--text);
+            font-size: 11px;
+            max-width: 180px;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            display: block;
+        }
+
+        .uom-text {
+            color: var(--text-faint);
+            font-size: 10px;
+            font-family: 'JetBrains Mono', monospace;
+        }
+
+        .num {
+            font-family: 'JetBrains Mono', monospace;
+            font-weight: 700;
+            font-size: 11px;
+        }
+
+        .num-blue {
+            color: var(--blue);
+        }
+
+        .num-green {
+            color: var(--green);
+        }
+
+        .num-red {
+            color: var(--red);
+        }
+
+        .num-orange {
+            color: var(--orange);
+        }
+
+        .num-purple {
+            color: var(--purple);
+        }
+
+        .num-teal {
+            color: var(--teal);
+        }
+
+        .num-dim {
+            color: var(--text-faint);
+        }
+
+        .badge-ok {
+            background: #f0fdf4;
+            color: var(--green);
+            border: 1px solid #bbf7d0;
+            padding: 3px 9px;
+            border-radius: 20px;
+            font-size: 9px;
+            font-weight: 700;
+            white-space: nowrap;
+        }
+
+        .badge-shortage {
+            background: #fef2f2;
+            color: var(--red);
+            border: 1px solid #fecaca;
+            padding: 3px 9px;
+            border-radius: 20px;
+            font-size: 9px;
+            font-weight: 700;
+            white-space: nowrap;
+        }
+
+        /* ── States ── */
+        .state-box {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            padding: 80px 20px;
+            gap: 14px;
+            color: var(--text-faint);
+        }
+
+        .state-icon {
+            font-size: 44px;
+            opacity: 0.6;
+        }
+
+        .state-title {
+            font-size: 11px;
+            font-weight: 700;
+            color: var(--text-dim);
+        }
+
+        .state-sub {
+            font-size: 13px;
+            text-align: center;
+            line-height: 1.7;
+        }
+
+        .spinner {
+            width: 28px;
+            height: 28px;
+            border: 3px solid var(--border2);
+            border-top-color: var(--blue);
+            border-radius: 50%;
+            animation: spin 0.8s linear infinite;
+        }
+
+        @keyframes spin {
+            to {
+                transform: rotate(360deg);
+            }
+        }
+
+        .ef-info-banner {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 7px 14px;
+            background: linear-gradient(135deg, #eff6ff, #f0f9ff);
+            border-bottom: 1px solid var(--border);
+            font-size: 11px;
+            color: var(--blue);
+            font-weight: 600;
+        }
+
+        .ef-info-banner span {
+            color: var(--text-dim);
+            font-weight: 500;
+        }
+    </style>
+</head>
+
+<body>
+
+    <!-- Header -->
+    <div class="header">
+        <div class="header-left">
+            <div class="header-logo">📦</div>
+            <div>
+                <h1>Multi-Batch Material Planning</h1>
+                <p>Select batch plans → view combined material requirement vs stock</p>
+            </div>
+        </div>
+        <div class="header-right">
+            <div class="ef-search-wrap" id="ef-search-wrap">
+                <span class="ef-search-icon">🔍</span>
+                <input type="text" class="ef-search-input" id="ef-search-input"
+                    placeholder="Search employee / EF name..." oninput="onEFSearchInput()" onfocus="onEFSearchFocus()"
+                    autocomplete="off">
+                <div class="ef-dropdown" id="ef-dropdown">
+                    <div class="ef-dropdown-list" id="ef-dropdown-list"></div>
+                </div>
+            </div>
+            <div class="ef-selected-badge" id="ef-selected-badge">
+                <span id="ef-badge-text">—</span>
+                <button class="ef-clear-btn" onclick="clearEFSelection()" title="Clear">✕</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Stat Cards -->
+    <div class="stat-grid">
+        <div class="stat-card s-blue">
+            <div class="stat-icon si-blue">🗂️</div>
+            <div>
+                <div class="stat-label">BPs Selected</div>
+                <div class="stat-value sv-blue" id="stat-bp">0</div>
+            </div>
+        </div>
+        <div class="stat-card s-green">
+            <div class="stat-icon si-green">📋</div>
+            <div>
+                <div class="stat-label">Total Items</div>
+                <div class="stat-value sv-green" id="stat-items">0</div>
+            </div>
+        </div>
+        <div class="stat-card s-red">
+            <div class="stat-icon si-red">⚠️</div>
+            <div>
+                <div class="stat-label">Shortage Items</div>
+                <div class="stat-value sv-red" id="stat-shortage">0</div>
+            </div>
+        </div>
+        <div class="stat-card s-orange">
+            <div class="stat-icon si-orange">✅</div>
+            <div>
+                <div class="stat-label">OK Items</div>
+                <div class="stat-value sv-orange" id="stat-ok">0</div>
+            </div>
+        </div>
+        <div class="stat-card s-teal">
+            <div class="stat-icon si-teal">🏭</div>
+            <div>
+                <div class="stat-label">Warehouse</div>
+                <div class="stat-value sv-teal" style="font-size:13px; line-height:1.3;" id="stat-wh">—</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Main Layout -->
+    <div class="main-layout">
+
+        <!-- LEFT PANEL -->
+        <div class="left-panel">
+            <div class="panel-header">
+                <div class="panel-title">📋 Batch Plans</div>
+                <span class="selected-pill" id="selected-count">0</span>
+            </div>
+
+            <div class="panel-filters">
+                <div class="filter-row">
+                    <select class="filter-select" id="month-filter" onchange="loadBPs()">
+                        <option value="">All Months</option>
+                        <option>January</option>
+                        <option>February</option>
+                        <option>March</option>
+                        <option>April</option>
+                        <option>May</option>
+                        <option>June</option>
+                        <option>July</option>
+                        <option>August</option>
+                        <option>September</option>
+                        <option>October</option>
+                        <option>November</option>
+                        <option>December</option>
+                    </select>
+                    <select class="filter-select" id="type-filter" onchange="filterBPList()">
+                        <option value="">All Types</option>
+                        <option value="Manufacturing">MFG</option>
+                        <option value="Process Development">PD</option>
+                        <option value="Machine Trial">Trial</option>
+                    </select>
+                </div>
+                <input type="text" class="filter-input" id="bp-search" placeholder="🔍 Search batch plan..."
+                    oninput="filterBPList()">
+            </div>
+
+            <div class="bp-list" id="bp-list">
+                <div class="state-box">
+                    <div class="state-sub" style="font-size:12px;">Select a head to load batch plans</div>
+                </div>
+            </div>
+
+            <div class="panel-footer">
+                <div class="footer-btns">
+                    <button class="btn-sel-all" onclick="selectAll()">✅ Select All</button>
+                    <button class="btn-clear" onclick="clearAll()">✕ Clear All</button>
+                </div>
+                <button class="btn-generate" onclick="generatePlan()">
+                    ⚡ Generate Material Plan
+                </button>
+            </div>
+        </div>
+
+        <!-- RIGHT PANEL -->
+        <div class="right-panel">
+            <div class="right-header">
+                <div class="right-title">📊 Combined Material Requirement</div>
+                <div class="right-actions">
+                    <button class="btn-shortage" id="shortage-btn" onclick="toggleShortage()">⚠️ Shortage Only</button>
+                    <button class="btn-export-shortage" onclick="exportShortageXLSX()">📥 Export Shortage</button>
+                    <button class="btn-export" onclick="exportCSV()">📄 Export All CSV</button>
+                    <button class="btn-export" onclick="createMaterialRequest()" id="mr-btn"
+                        style="background:#f5f3ff;color:#7c3aed;border:1px solid #e9d5ff;">📋 Material Request</button>
+                </div>
+            </div>
+
+            <div class="ef-info-banner" id="ef-info-banner" style="display:none;">
+                <span>🏭 Warehouse:</span>
+                <strong id="ef-wh-label">—</strong>
+                <span style="margin-left:12px;">👤 Head:</span>
+                <strong id="ef-head-label">—</strong>
+                <span style="margin-left:12px;">🔧 EF:</span>
+                <strong id="ef-name-label">—</strong>
+            </div>
+
+            <div class="tags-strip" id="tags-strip">
+                <span class="no-sel-text">No BPs selected — choose from left panel</span>
+            </div>
+
+            <div class="search-bar">
+                <input type="text" class="search-input" id="item-search" placeholder="🔍 Search item code or name..."
+                    oninput="filterItems()">
+            </div>
+
+            <div class="table-wrap" id="result-area">
+                <div class="state-box">
+                    <div class="state-icon">📦</div>
+                    <div class="state-title">No data yet</div>
+                    <div class="state-sub">Select a head → choose batch plans → click <strong>Generate Material
+                            Plan</strong></div>
+                </div>
+            </div>
+        </div>
+
+    </div>
+
+    <script>
+        // ── State ──
+        let allBPs = [];
+        let filteredBPs = [];
+        let selectedBPs = new Set();
+        let allItems = [];
+        let showShortageOnly = false;
+        let selectedEF = "";
+        let selectedEFHead = "";
+        let allEFData = [];
+
+        // ── CSRF ──
+        function getCsrf() {
+            let t = window.csrf_token || '';
+            if (!t || t === 'None') {
+                document.cookie.split(';').forEach(c => {
+                    c = c.trim();
+                    if (c.startsWith('csrf_token=')) t = decodeURIComponent(c.split('=')[1]);
+                });
+            }
+            return t;
+        }
+
+        async function frappe_call(method, args) {
+            const res = await fetch(`/api/method/${method}`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-Frappe-CSRF-Token': getCsrf(),
+                    'X-Requested-With': 'XMLHttpRequest',
+                    'Accept': 'application/json'
+                },
+                credentials: 'same-origin',
+                body: JSON.stringify(args)
+            });
+            const data = await res.json();
+            if (data.exc) throw new Error(data.exc);
+            return data.message;
+        }
+
+        // ── Init ──
+        window.onload = async function () {
+            await loadEFData();
+            // Close dropdown on outside click
+            document.addEventListener('click', function (e) {
+                if (!document.getElementById('ef-search-wrap').contains(e.target)) {
+                    closeEFDropdown();
+                }
+            });
+        };
+
+        // ── Load all EF data once ──
+        // ── Load all EF data once ──
+        async function loadEFData() {
+            try {
+                allEFData = await frappe_call('frappe.client.get_list', {
+                    doctype: 'Employee Function',
+                    fields: ['name', 'function_head_name'],
+                    filters: [['function_head_name', '!=', '']],
+                    limit: 500,
+                    limit_page_length: 500,
+                    order_by: 'function_head_name asc'
+                });
+                allEFData = allEFData || [];
+            } catch (e) {
+                console.error('Failed to load EF data:', e);
+            }
+        }
+
+        // ── EF Search ──
+        function onEFSearchInput() {
+            const q = document.getElementById('ef-search-input').value.trim().toLowerCase();
+            if (!q) { closeEFDropdown(); return; }
+            const matches = allEFData.filter(ef =>
+                (ef.function_head_name || '').toLowerCase().includes(q) ||
+                (ef.name || '').toLowerCase().includes(q)
+            ).slice(0, 20);
+            renderEFDropdown(matches);
+        }
+
+        function onEFSearchFocus() {
+            const q = document.getElementById('ef-search-input').value.trim().toLowerCase();
+            if (q) onEFSearchInput();
+        }
+
+        function renderEFDropdown(matches) {
+            const list = document.getElementById('ef-dropdown-list');
+            if (!matches.length) {
+                list.innerHTML = '<div class="ef-no-results">No results found</div>';
+            } else {
+                list.innerHTML = matches.map(ef => `
+                    <div class="ef-option" onclick="selectEF('${ef.name}', '${(ef.function_head_name || '').replace(/'/g, "\\'")}')">
+                        <span class="ef-option-head">${ef.function_head_name || '—'}</span>
+                        <span class="ef-option-name">${ef.name}</span>
+                    </div>`).join('');
+            }
+            document.getElementById('ef-dropdown').classList.add('open');
+        }
+
+        function closeEFDropdown() {
+            document.getElementById('ef-dropdown').classList.remove('open');
+        }
+
+        async function selectEF(efName, headName) {
+            selectedEF = efName;
+            selectedEFHead = headName;
+            closeEFDropdown();
+
+            // Show selected badge, hide search input
+            document.getElementById('ef-search-input').value = '';
+            document.getElementById('ef-search-input').style.display = 'none';
+            const badge = document.getElementById('ef-selected-badge');
+            badge.style.display = 'flex';
+            document.getElementById('ef-badge-text').textContent = `${headName} (${efName})`;
+
+            // Reset state
+            selectedBPs.clear();
+            allItems = [];
+            updateCount();
+            updateTags();
+            updateStats([]);
+            document.getElementById('result-area').innerHTML = `
+                <div class="state-box">
+                    <div class="state-icon">📦</div>
+                    <div class="state-sub">Select batch plans and click Generate</div>
+                </div>`;
+
+            // Show EF info banner
+            document.getElementById('ef-info-banner').style.display = 'flex';
+            document.getElementById('ef-head-label').textContent = headName;
+            document.getElementById('ef-name-label').textContent = efName;
+            document.getElementById('ef-wh-label').textContent = 'Loading...';
+
+            try {
+                const efDoc = await frappe_call('frappe.client.get', {
+                    doctype: 'Employee Function',
+                    name: efName
+                });
+                const wh = (efDoc.table_bukm && efDoc.table_bukm.length > 0)
+                    ? efDoc.table_bukm[0].store_warehouse : '—';
+                document.getElementById('ef-wh-label').textContent = wh;
+                document.getElementById('stat-wh').textContent = wh;
+            } catch (e) {
+                document.getElementById('ef-wh-label').textContent = '—';
+            }
+
+            loadBPs();
+        }
+
+        function clearEFSelection() {
+            selectedEF = '';
+            selectedEFHead = '';
+            document.getElementById('ef-search-input').style.display = '';
+            document.getElementById('ef-selected-badge').style.display = 'none';
+            document.getElementById('ef-info-banner').style.display = 'none';
+            document.getElementById('stat-wh').textContent = '—';
+            selectedBPs.clear();
+            allBPs = [];
+            filteredBPs = [];
+            allItems = [];
+            updateCount();
+            updateTags();
+            updateStats([]);
+            document.getElementById('bp-list').innerHTML = `
+                <div class="state-box">
+                    <div class="state-sub" style="font-size:12px;">Search an employee to load batch plans</div>
+                </div>`;
+            document.getElementById('result-area').innerHTML = `
+                <div class="state-box">
+                    <div class="state-icon">📦</div>
+                    <div class="state-title">No data yet</div>
+                    <div class="state-sub">Search an employee → select batch plans → Generate</div>
+                </div>`;
+        }
+
+        // ── Load BPs ──
+        async function loadBPs() {
+            if (!selectedEF) return;
+
+            document.getElementById('bp-list').innerHTML = `
+                <div class="state-box">
+                    <div class="spinner"></div>
+                    <div class="state-sub">Fetching batch plans...</div>
+                </div>`;
+
+            const month = document.getElementById('month-filter').value;
+            try {
+                const data = await frappe_call('custom_batch_planning.api.multi_batch_planning.get_approved_batch_plannings', {
+                    employee_function: selectedEF,
+                    month
+                });
+                allBPs = data || [];
+                const validNames = new Set(allBPs.map(b => b.name));
+                selectedBPs.forEach(name => { if (!validNames.has(name)) selectedBPs.delete(name); });
+                filterBPList();
+                updateCount();
+                updateTags();
+            } catch (e) {
+                document.getElementById('bp-list').innerHTML = `
+                    <div class="state-box">
+                        <div class="state-icon">❌</div>
+                        <div class="state-sub" style="color:var(--red)">${e.message}</div>
+                    </div>`;
+            }
+        }
+
+        // ── Filter BP List ──
+        function filterBPList() {
+            const q = document.getElementById('bp-search').value.trim().toLowerCase();
+            const type = document.getElementById('type-filter').value;
+            filteredBPs = allBPs;
+            if (q) filteredBPs = filteredBPs.filter(b =>
+                (b.name || '').toLowerCase().includes(q) ||
+                (b.finished_item || '').toLowerCase().includes(q)
+            );
+            if (type) filteredBPs = filteredBPs.filter(b => b.batch_type === type);
+            renderBPList(filteredBPs);
+        }
+
+        // ── Render BP List ──
+        function renderBPList(bps) {
+            if (!bps.length) {
+                document.getElementById('bp-list').innerHTML = `
+                    <div class="state-box">
+                        <div class="state-icon">🔍</div>
+                        <div class="state-sub">No batch plans found</div>
+                    </div>`;
+                return;
+            }
+            let html = '';
+            bps.forEach(bp => {
+                const checked = selectedBPs.has(bp.name);
+                const typeClass = bp.batch_type === 'Manufacturing' ? 'tb-mfg' :
+                    bp.batch_type === 'Process Development' ? 'tb-pd' : 'tb-trial';
+                const typeLabel = bp.batch_type === 'Manufacturing' ? 'MFG' :
+                    bp.batch_type === 'Process Development' ? 'PD' : 'Trial';
+                html += `
+                <div class="bp-item ${checked ? 'selected' : ''}" data-name="${bp.name}" onclick="toggleBP('${bp.name}', this)">
+                    <input type="checkbox" ${checked ? 'checked' : ''}
+                        onclick="event.stopPropagation(); toggleBP('${bp.name}', this.closest('.bp-item'))">
+                    <div class="bp-info">
+                        <div class="bp-name">${bp.name}</div>
+                        <div class="bp-sub">${bp.finished_item || '—'}</div>
+                    </div>
+                    <span class="type-badge ${typeClass}">${typeLabel}</span>
+                </div>`;
+            });
+            document.getElementById('bp-list').innerHTML = html;
+        }
+
+        function toggleBP(name, el) {
+            if (selectedBPs.has(name)) {
+                selectedBPs.delete(name);
+                el.classList.remove('selected');
+                el.querySelector('input[type="checkbox"]').checked = false;
+            } else {
+                selectedBPs.add(name);
+                el.classList.add('selected');
+                el.querySelector('input[type="checkbox"]').checked = true;
+            }
+            updateCount();
+            updateTags();
+        }
+
+        function selectAll() {
+            filteredBPs.forEach(bp => selectedBPs.add(bp.name));
+            renderBPList(filteredBPs);
+            updateCount();
+            updateTags();
+        }
+
+        function clearAll() {
+            if (filteredBPs.length === allBPs.length) selectedBPs.clear();
+            else filteredBPs.forEach(bp => selectedBPs.delete(bp.name));
+            renderBPList(filteredBPs);
+            updateCount();
+            updateTags();
+        }
+
+        function updateCount() {
+            const count = selectedBPs.size;
+            document.getElementById('selected-count').textContent = count;
+            document.getElementById('stat-bp').textContent = count;
+        }
+
+        function updateTags() {
+            const strip = document.getElementById('tags-strip');
+            if (!selectedBPs.size) {
+                strip.innerHTML = '<span class="no-sel-text">No BPs selected — choose from left panel</span>';
+                return;
+            }
+            strip.innerHTML = [...selectedBPs].map(n => `<span class="bp-tag">${n}</span>`).join('');
+        }
+
+        // ── Generate Plan ──
+        async function generatePlan() {
+            if (!selectedBPs.size) { alert('Please select at least one Batch Plan!'); return; }
+            if (!selectedEF) { alert('Please select an Employee Function head first!'); return; }
+
+            document.getElementById('result-area').innerHTML = `
+                <div class="state-box">
+                    <div class="spinner"></div>
+                    <div class="state-sub">Generating material plan...</div>
+                </div>`;
+            try {
+                const data = await frappe_call('custom_batch_planning.api.multi_batch_planning.get_multi_batch_material_plan', {
+                    bp_names: [...selectedBPs],
+                    employee_function: selectedEF
+                });
+                allItems = data || [];
+                filterItems();
+                updateStats(allItems);
+            } catch (e) {
+                document.getElementById('result-area').innerHTML = `
+                    <div class="state-box">
+                        <div class="state-icon">❌</div>
+                        <div class="state-title">Error</div>
+                        <div class="state-sub" style="color:var(--red)">${e.message}</div>
+                    </div>`;
+            }
+        }
+
+        // ── Filter Items ──
+        function filterItems() {
+            const q = document.getElementById('item-search').value.trim().toLowerCase();
+            let filtered = allItems;
+            if (q) filtered = filtered.filter(r =>
+                r.item_code.toLowerCase().includes(q) ||
+                (r.item_name || '').toLowerCase().includes(q)
+            );
+            if (showShortageOnly) filtered = filtered.filter(r => r.status === 'shortage');
+            renderTable(filtered);
+        }
+
+        function toggleShortage() {
+            showShortageOnly = !showShortageOnly;
+            document.getElementById('shortage-btn').classList.toggle('active', showShortageOnly);
+            filterItems();
+        }
+
+        // ── Format number — remove trailing zeros ──
+        function fmt(v) {
+            if (v === null || v === undefined) return '<span class="num num-dim">—</span>';
+            const n = parseFloat(v);
+            if (isNaN(n)) return '<span class="num num-dim">—</span>';
+            return n % 1 === 0 ? n.toString() : parseFloat(n.toFixed(4)).toString();
+        }
+
+        // ── Render Table ──
+        function renderTable(data) {
+            if (!data.length) {
+                document.getElementById('result-area').innerHTML = `
+                    <div class="state-box">
+                        <div class="state-icon">🔍</div>
+                        <div class="state-sub">No items found matching your filters</div>
+                    </div>`;
+                return;
+            }
+
+            let html = `
+            <table class="data-table">
+                <thead>
+                    <tr class="group-row">
+                        <th colspan="4" class="th-group-info">Item Info</th>
+                        <th colspan="5" class="th-group-stock">Stock</th>
+                        <th colspan="3" class="th-group-flow">Incoming</th>
+                        <th colspan="3" class="th-group-result">Result</th>
+                        <th colspan="1" class="th-group-status">Status</th>
+                    </tr>
+                    <tr class="col-row">
+                        <th>#</th>
+                        <th>Item Code</th>
+                        <th>Item Name</th>
+                        <th>UOM</th>
+                        <th style="border-left:2px solid #bfdbfe;">Qty Req</th>
+                        <th>Total Stock</th>
+                        <th>Main WH</th>
+                        <th>Lab Wise</th>
+                        <th style="border-right:2px solid #bfdbfe;">Allocated</th>
+                        <th style="border-left:2px solid #bbf7d0;">Open PR</th>
+                        <th>Open PO</th>
+                        <th style="border-right:2px solid #bbf7d0;">Open GRN</th>
+                        <th style="border-left:2px solid #fde68a;">Free Qty</th>
+                        <th>Net Req</th>
+                        <th style="border-right:2px solid #fde68a;">Expired Qty</th>
+                        <th>Status</th>
+                    </tr>
+                </thead>
+                <tbody>`;
+
+            data.forEach((row, i) => {
+                const isShortage = row.status === 'shortage';
+                const netReqColor = parseFloat(row.net_requirement) > 0 ? 'num-red' : 'num-green';
+                const freeColor = parseFloat(row.free_stock) > 0 ? 'num-green' : 'num-red';
+
+                html += `
+                <tr class="${isShortage ? 'shortage-row' : ''}">
+                    <td><span class="row-num">${i + 1}</span></td>
+                    <td><a class="item-code-link" href="/app/item/${row.item_code}" target="_blank">${row.item_code}</a></td>
+                    <td><span class="item-name" title="${row.item_name || ''}">${row.item_name || '—'}</span></td>
+                    <td><span class="uom-text">${row.uom || '—'}</span></td>
+                    <td style="border-left:2px solid #bfdbfe;"><span class="num num-orange">${fmt(row.required_qty)}</span></td>
+                    <td><span class="num num-blue">${fmt(row.total_stock)}</span></td>
+                    <td><span class="num num-blue">${fmt(row.main_stock)}</span></td>
+                    <td><span class="num num-purple">${fmt(row.lab_stock)}</span></td>
+                    <td style="border-right:2px solid #bfdbfe;"><span class="num num-orange">${fmt(row.allocated_qty)}</span></td>
+                    <td style="border-left:2px solid #bbf7d0;"><span class="num num-teal">${fmt(row.open_pr)}</span></td>
+                    <td><span class="num num-blue">${fmt(row.open_po)}</span></td>
+                    <td style="border-right:2px solid #bbf7d0;"><span class="num num-green">${fmt(row.open_grn)}</span></td>
+                    <td style="border-left:2px solid #fde68a;"><span class="num ${freeColor}">${fmt(row.free_stock)}</span></td>
+                    <td><span class="num ${netReqColor}">${fmt(row.net_requirement)}</span></td>
+                    <td style="border-right:2px solid #fde68a;"><span class="num num-red">${fmt(row.expired_qty)}</span></td>
+                    <td>${isShortage
+                        ? '<span class="badge-shortage">⚠️ Shortage</span>'
+                        : '<span class="badge-ok">✅ OK</span>'
+                    }</td>
+                </tr>`;
+            });
+
+            html += '</tbody></table>';
+            document.getElementById('result-area').innerHTML = html;
+        }
+
+        // ── Update Stats ──
+        function updateStats(items) {
+            const total = items.length;
+            const shortage = items.filter(r => r.status === 'shortage').length;
+            document.getElementById('stat-items').textContent = total;
+            document.getElementById('stat-shortage').textContent = shortage;
+            document.getElementById('stat-ok').textContent = total - shortage;
+        }
+
+        // ── Export Shortage CSV ──
+        function exportShortageXLSX() {
+            const shortageItems = allItems.filter(r => r.status === 'shortage');
+            if (!shortageItems.length) { alert('No shortage items to export!'); return; }
+            const headers = ['Item Code', 'Item Name', 'Qty Required', 'Net Requirement', 'UOM'];
+            let csv = headers.join(',') + '\n';
+            shortageItems.forEach(r => {
+                csv += [
+                    r.item_code,
+                    `"${(r.item_name || '').replace(/"/g, '""')}"`,
+                    r.required_qty,
+                    r.net_requirement,
+                    r.uom || ''
+                ].join(',') + '\n';
+            });
+            downloadCSV(csv, `shortage-items-${today()}.csv`);
+        }
+
+        // ── Export All CSV ──
+        function exportCSV() {
+            if (!allItems.length) { alert('No data to export!'); return; }
+            const headers = ['Item Code', 'Item Name', 'UOM', 'Required Qty', 'Total Stock', 'Main WH', 'Lab Wise', 'Allocated', 'Open PR', 'Open PO', 'Open GRN', 'Free Qty', 'Net Req', 'Expired Qty', 'Status'];
+            let csv = headers.join(',') + '\n';
+            allItems.forEach(r => {
+                csv += [
+                    r.item_code,
+                    `"${(r.item_name || '').replace(/"/g, '""')}"`,
+                    r.uom, r.required_qty, r.total_stock, r.main_stock,
+                    r.lab_stock, r.allocated_qty, r.open_pr, r.open_po,
+                    r.open_grn, r.free_stock, r.net_requirement, r.expired_qty, r.status
+                ].join(',') + '\n';
+            });
+            downloadCSV(csv, `material-plan-${today()}.csv`);
+        }
+
+        function downloadCSV(csv, filename) {
+            const blob = new Blob([csv], { type: 'text/csv' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url; a.download = filename; a.click();
+            URL.revokeObjectURL(url);
+        }
+
+        function createMaterialRequest() {
+            if (!allItems.length) { alert('Generate material plan first!'); return; }
+
+            const shortageItems = allItems.filter(r => parseFloat(r.net_requirement || 0) > 0);
+            if (!shortageItems.length) { alert('No shortage items. All stock is sufficient!'); return; }
+
+            const bpNames = [...selectedBPs].join(', ');
+
+            // Store data for MR form to pick up
+            localStorage.setItem('mr_prefill', JSON.stringify({
+                batch_nos: bpNames,
+                employee_function: selectedEF,
+                items: shortageItems.map(r => ({
+                    item_code: r.item_code,
+                    qty: parseFloat(r.net_requirement),
+                    uom: r.uom,
+                    schedule_date: new Date(Date.now() + 86400000).toISOString().slice(0, 10)
+                }))
+            }));
+
+            window.open('/app/material-request/new-material-request-1', '_blank');
+        }
+
+        function today() { return new Date().toISOString().slice(0, 10); }
+    </script>
+</body>
+
+</html>

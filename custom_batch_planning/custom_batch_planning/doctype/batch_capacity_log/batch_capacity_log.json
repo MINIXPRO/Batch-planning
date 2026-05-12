@@ -1,0 +1,90 @@
+{
+ "actions": [],
+ "allow_rename": 1,
+ "creation": "2026-04-17 09:56:22.321628",
+ "doctype": "DocType",
+ "editable_grid": 1,
+ "engine": "InnoDB",
+ "field_order": [
+  "batch_capacity_log_details_section",
+  "changed_on",
+  "changed_by",
+  "old_capacity",
+  "new_capacity",
+  "effective_from",
+  "batch_end_date",
+  "remarks"
+ ],
+ "fields": [
+  {
+   "fieldname": "batch_capacity_log_details_section",
+   "fieldtype": "Section Break",
+   "label": "Batch Capacity Log Details"
+  },
+  {
+   "fieldname": "changed_on",
+   "fieldtype": "Datetime",
+   "in_list_view": 1,
+   "label": "Changed On",
+   "reqd": 1
+  },
+  {
+   "fieldname": "changed_by",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "label": "Changed By",
+   "options": "User",
+   "reqd": 1
+  },
+  {
+   "fieldname": "old_capacity",
+   "fieldtype": "Int",
+   "in_list_view": 1,
+   "label": "Old Capacity",
+   "non_negative": 1,
+   "reqd": 1
+  },
+  {
+   "fieldname": "new_capacity",
+   "fieldtype": "Int",
+   "in_list_view": 1,
+   "label": "New Capacity",
+   "non_negative": 1,
+   "reqd": 1
+  },
+  {
+   "fieldname": "effective_from",
+   "fieldtype": "Date",
+   "in_list_view": 1,
+   "label": "Batch Effective Date",
+   "reqd": 1
+  },
+  {
+   "fieldname": "remarks",
+   "fieldtype": "Small Text",
+   "label": "Remarks",
+   "reqd": 1
+  },
+  {
+   "fieldname": "batch_end_date",
+   "fieldtype": "Date",
+   "in_list_view": 1,
+   "label": "Batch End Date"
+  }
+ ],
+ "grid_page_length": 50,
+ "index_web_pages_for_search": 1,
+ "istable": 1,
+ "links": [],
+ "modified": "2026-04-17 10:04:16.555287",
+ "modified_by": "Administrator",
+ "module": "Custom Batch Planning",
+ "name": "Batch Capacity Log",
+ "owner": "Administrator",
+ "permissions": [],
+ "row_format": "Dynamic",
+ "rows_threshold_for_grid_search": 20,
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": []
+}

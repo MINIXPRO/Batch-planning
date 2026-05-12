@@ -1,0 +1,125 @@
+{
+ "actions": [],
+ "allow_rename": 1,
+ "creation": "2026-03-18 11:26:09.846719",
+ "doctype": "DocType",
+ "editable_grid": 1,
+ "engine": "InnoDB",
+ "field_order": [
+  "item_code",
+  "item_name",
+  "uom",
+  "quantity_required",
+  "stock_available",
+  "open_pr",
+  "open_po",
+  "grn_qty",
+  "allocate_qty",
+  "qty_allocated",
+  "shortage",
+  "reason",
+  "batch_details"
+ ],
+ "fields": [
+  {
+   "fieldname": "item_code",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "label": "Item Code",
+   "options": "Item",
+   "read_only": 1
+  },
+  {
+   "fieldname": "item_name",
+   "fieldtype": "Data",
+   "label": "Item Name",
+   "read_only": 1
+  },
+  {
+   "fieldname": "uom",
+   "fieldtype": "Link",
+   "label": "UOM",
+   "options": "UOM",
+   "read_only": 1
+  },
+  {
+   "fieldname": "quantity_required",
+   "fieldtype": "Float",
+   "in_list_view": 1,
+   "label": "Quantity Required",
+   "read_only": 1
+  },
+  {
+   "fieldname": "stock_available",
+   "fieldtype": "Float",
+   "in_list_view": 1,
+   "label": "Stock Available",
+   "read_only": 1
+  },
+  {
+   "fieldname": "open_pr",
+   "fieldtype": "Float",
+   "label": "Open PR",
+   "read_only": 1
+  },
+  {
+   "fieldname": "open_po",
+   "fieldtype": "Float",
+   "label": "Open PO",
+   "read_only": 1
+  },
+  {
+   "fieldname": "grn_qty",
+   "fieldtype": "Float",
+   "label": "GRN Qty",
+   "read_only": 1
+  },
+  {
+   "fieldname": "allocate_qty",
+   "fieldtype": "Float",
+   "in_list_view": 1,
+   "label": "Qty Requested"
+  },
+  {
+   "allow_on_submit": 1,
+   "fieldname": "qty_allocated",
+   "fieldtype": "Float",
+   "in_list_view": 1,
+   "label": "Qty Allocated",
+   "read_only": 1
+  },
+  {
+   "fieldname": "shortage",
+   "fieldtype": "Float",
+   "in_list_view": 1,
+   "label": "Shortage",
+   "read_only": 1
+  },
+  {
+   "fieldname": "reason",
+   "fieldtype": "Small Text",
+   "label": "Reason"
+  },
+  {
+   "fieldname": "batch_details",
+   "fieldtype": "Table",
+   "label": "Batch Details",
+   "options": "MA Batch Detail"
+  }
+ ],
+ "grid_page_length": 50,
+ "index_web_pages_for_search": 1,
+ "istable": 1,
+ "links": [],
+ "modified": "2026-05-06 11:29:09.370228",
+ "modified_by": "Administrator",
+ "module": "Custom Batch Planning",
+ "name": "Material Allocation Item",
+ "owner": "Administrator",
+ "permissions": [],
+ "row_format": "Dynamic",
+ "rows_threshold_for_grid_search": 20,
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": []
+}

@@ -1,0 +1,880 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Monthly Reconciliation</title>
+    <script>window.csrf_token = "{{ frappe.session.csrf_token }}";</script>
+    <link
+        href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap"
+        rel="stylesheet">
+    <style>
+        *,
+        *::before,
+        *::after {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        :root {
+            --bg: #f0faf4;
+            --surface: #ffffff;
+            --surface2: #f4fbf7;
+            --border: #c8e6d4;
+            --border2: #a8d5bc;
+            --text: #0d2b1a;
+            --text2: #1e4d32;
+            --muted: #5a8a70;
+            --muted2: #7aaa90;
+
+            --g1: #16a34a;
+            /* primary green */
+            --g2: #15803d;
+            /* dark green */
+            --g3: #22c55e;
+            /* bright green */
+            --g4: #bbf7d0;
+            /* light green */
+            --g5: #dcfce7;
+            /* pale green */
+            --g6: #059669;
+            /* teal-green */
+
+            --red: #dc2626;
+            --orange: #ea580c;
+
+            --grad: linear-gradient(135deg, #16a34a, #059669);
+            --shadow-sm: 0 1px 4px rgba(22, 163, 74, 0.08);
+            --shadow-md: 0 4px 16px rgba(22, 163, 74, 0.11);
+        }
+
+        body {
+            background: var(--bg);
+            background-image:
+                radial-gradient(ellipse at 15% 0%, rgba(134, 239, 172, 0.22) 0%, transparent 50%),
+                radial-gradient(ellipse at 85% 100%, rgba(110, 231, 183, 0.18) 0%, transparent 50%);
+            font-family: 'Plus Jakarta Sans', sans-serif;
+            color: var(--text);
+            min-height: 100vh;
+        }
+
+        /* ── HEADER ── */
+        .page-header {
+            background: var(--surface);
+            border-bottom: 1px solid var(--border);
+            padding: 0 32px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            height: 64px;
+            position: sticky;
+            top: 0;
+            z-index: 100;
+            box-shadow: 0 2px 12px rgba(22, 163, 74, 0.07);
+        }
+
+        .header-left {
+            display: flex;
+            align-items: center;
+            gap: 14px;
+        }
+
+        .header-icon {
+            width: 40px;
+            height: 40px;
+            background: var(--grad);
+            border-radius: 10px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 18px;
+            box-shadow: 0 4px 12px rgba(22, 163, 74, 0.28);
+            flex-shrink: 0;
+        }
+
+        .header-title {
+            font-size: 16px;
+            font-weight: 800;
+            letter-spacing: -0.3px;
+        }
+
+        .header-sub {
+            font-size: 11.5px;
+            color: var(--muted);
+            margin-top: 1px;
+        }
+
+        .header-right {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .ef-chip {
+            background: var(--surface2);
+            border: 1px solid var(--border);
+            border-radius: 10px;
+            padding: 8px 16px;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            box-shadow: var(--shadow-sm);
+        }
+
+        .ef-chip-item {
+            display: flex;
+            flex-direction: column;
+        }
+
+        .ef-chip-label {
+            font-size: 9.5px;
+            color: var(--muted2);
+            text-transform: uppercase;
+            letter-spacing: 0.7px;
+            font-weight: 700;
+        }
+
+        .ef-chip-value {
+            font-size: 13px;
+            font-weight: 700;
+            font-family: 'JetBrains Mono', monospace;
+            color: var(--g1);
+        }
+
+        .ef-chip-sep {
+            width: 1px;
+            height: 28px;
+            background: var(--border);
+        }
+
+        .ef-chip-head {
+            font-size: 13px;
+            font-weight: 600;
+            color: var(--text2);
+        }
+
+        .admin-badge {
+            background: var(--grad);
+            color: #fff;
+            font-size: 11px;
+            font-weight: 700;
+            padding: 5px 13px;
+            border-radius: 20px;
+            letter-spacing: 0.4px;
+            box-shadow: 0 2px 8px rgba(22, 163, 74, 0.30);
+        }
+
+        /* ── MAIN ── */
+        .main {
+            padding: 28px 32px;
+            max-width: 1800px;
+            margin: 0 auto;
+        }
+
+        /* ── STATS ── */
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(6, 1fr);
+            gap: 14px;
+            margin-bottom: 22px;
+        }
+
+        .stat-card {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 14px;
+            padding: 18px 20px;
+            box-shadow: var(--shadow-sm);
+            position: relative;
+            overflow: hidden;
+            transition: box-shadow 0.2s, transform 0.2s;
+        }
+
+        .stat-card:hover {
+            box-shadow: var(--shadow-md);
+            transform: translateY(-1px);
+        }
+
+        .stat-card::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 3px;
+            background: var(--grad);
+        }
+
+        .stat-label {
+            font-size: 10.5px;
+            color: var(--muted);
+            text-transform: uppercase;
+            letter-spacing: 0.7px;
+            font-weight: 700;
+            margin-bottom: 8px;
+        }
+
+        .stat-value {
+            font-size: 28px;
+            font-weight: 800;
+            font-family: 'JetBrains Mono', monospace;
+            color: var(--g1);
+            letter-spacing: -1px;
+        }
+
+        /* ── FILTERS ── */
+        .filters-card {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 14px;
+            padding: 18px 22px;
+            margin-bottom: 22px;
+            box-shadow: var(--shadow-sm);
+        }
+
+        .filters-row {
+            display: flex;
+            gap: 12px;
+            align-items: flex-end;
+            flex-wrap: wrap;
+        }
+
+        .filter-group {
+            display: flex;
+            flex-direction: column;
+            gap: 5px;
+            min-width: 140px;
+        }
+
+        .filter-group label {
+            font-size: 10.5px;
+            font-weight: 700;
+            color: var(--muted);
+            text-transform: uppercase;
+            letter-spacing: 0.6px;
+        }
+
+        .filter-group select,
+        .filter-group input {
+            background: var(--surface2);
+            border: 1.5px solid var(--border);
+            border-radius: 9px;
+            color: var(--text);
+            font-family: 'Plus Jakarta Sans', sans-serif;
+            font-size: 13px;
+            padding: 9px 13px;
+            height: 40px;
+            outline: none;
+            transition: border-color 0.2s, box-shadow 0.2s;
+        }
+
+        .filter-group select:focus,
+        .filter-group input:focus {
+            border-color: var(--g1);
+            box-shadow: 0 0 0 3px rgba(22, 163, 74, 0.12);
+        }
+
+        .filter-group select option {
+            background: #fff;
+            color: var(--text);
+        }
+
+        .filter-group.admin-ef label {
+            color: var(--g6);
+        }
+
+        .filter-group.admin-ef select {
+            border-color: var(--g6);
+            color: var(--g6);
+        }
+
+        .admin-ef-wrap {
+            display: none;
+        }
+
+        /* ── BUTTONS ── */
+        .btn {
+            height: 40px;
+            border: none;
+            border-radius: 9px;
+            font-family: 'Plus Jakarta Sans', sans-serif;
+            font-size: 13px;
+            font-weight: 700;
+            cursor: pointer;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 6px;
+            padding: 0 20px;
+            transition: all 0.2s;
+            white-space: nowrap;
+        }
+
+        .btn-refresh {
+            background: var(--surface2);
+            color: var(--g2);
+            border: 1.5px solid var(--border2);
+        }
+
+        .btn-refresh:hover {
+            background: var(--g5);
+            border-color: var(--g1);
+            box-shadow: 0 2px 8px rgba(22, 163, 74, 0.15);
+        }
+
+        .btn-export {
+            background: var(--grad);
+            color: #fff;
+            box-shadow: 0 3px 10px rgba(22, 163, 74, 0.30);
+        }
+
+        .btn-export:hover {
+            box-shadow: 0 5px 18px rgba(22, 163, 74, 0.40);
+            transform: translateY(-1px);
+        }
+
+        /* ── TABLE ── */
+        .table-card {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 14px;
+            overflow: hidden;
+            box-shadow: var(--shadow-sm);
+        }
+
+        .table-wrap {
+            overflow-x: auto;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+
+        thead th {
+            background: var(--g1);
+            color: #fff;
+            font-size: 10.5px;
+            font-weight: 800;
+            text-transform: uppercase;
+            letter-spacing: 0.6px;
+            padding: 13px 14px;
+            text-align: center;
+            border-right: 1px solid rgba(255, 255, 255, 0.12);
+            white-space: nowrap;
+        }
+
+        thead th:first-child {
+            text-align: left;
+        }
+
+        thead th:last-child {
+            border-right: none;
+        }
+
+        tbody td {
+            padding: 12px 14px;
+            font-size: 13px;
+            text-align: center;
+            border-bottom: 1px solid #e8f5ee;
+            border-right: 1px solid #e8f5ee;
+            vertical-align: middle;
+        }
+
+        tbody td:first-child {
+            text-align: left;
+            border-right: 2px solid var(--border);
+        }
+
+        tbody td:last-child {
+            border-right: none;
+        }
+
+        tbody tr:last-child td {
+            border-bottom: none;
+        }
+
+        tbody tr:hover td {
+            background: #f6fef9;
+        }
+
+        .total-row td {
+            background: var(--g5) !important;
+            color: var(--g2) !important;
+            font-weight: 800;
+            border-top: 2px solid var(--border2);
+        }
+
+        .month-cell {
+            font-weight: 700;
+            color: var(--text2);
+            font-size: 13px;
+        }
+
+        /* ── BADGES ── */
+        .bdg {
+            display: inline-flex;
+            align-items: center;
+            padding: 3px 10px;
+            border-radius: 20px;
+            font-size: 11px;
+            font-weight: 700;
+            font-family: 'JetBrains Mono', monospace;
+        }
+
+        .bdg-green {
+            background: var(--g5);
+            color: var(--g2);
+            border: 1px solid var(--g4);
+        }
+
+        .bdg-dark {
+            background: #bbf7d044;
+            color: var(--g6);
+            border: 1px solid #6ee7b766;
+        }
+
+        .bdg-red {
+            background: #fee2e2;
+            color: var(--red);
+            border: 1px solid #fca5a5;
+        }
+
+        .bdg-orange {
+            background: #fff7ed;
+            color: var(--orange);
+            border: 1px solid #fdba74;
+        }
+
+        .bdg-zero {
+            background: var(--surface2);
+            color: var(--muted2);
+            border: 1px solid var(--border);
+        }
+
+        /* ── STATE ── */
+        .state-box {
+            padding: 64px 20px;
+            text-align: center;
+            color: var(--muted);
+            font-size: 14px;
+        }
+
+        .state-box .icon {
+            font-size: 38px;
+            margin-bottom: 12px;
+        }
+
+        ::-webkit-scrollbar {
+            width: 6px;
+            height: 6px;
+        }
+
+        ::-webkit-scrollbar-track {
+            background: var(--surface2);
+        }
+
+        ::-webkit-scrollbar-thumb {
+            background: var(--border2);
+            border-radius: 3px;
+        }
+
+        ::-webkit-scrollbar-thumb:hover {
+            background: var(--g1);
+        }
+
+        @media (max-width: 1200px) {
+            .stats-grid {
+                grid-template-columns: repeat(3, 1fr);
+            }
+        }
+    </style>
+</head>
+
+<body>
+
+    <!-- HEADER -->
+    <div class="page-header">
+        <div class="header-left">
+            <div class="header-icon">📅</div>
+            <div>
+                <div class="header-title">Monthly Reconciliation</div>
+                <div class="header-sub">Month-wise summary — Slots, Batches, MR, PO, GRN, PI, MA, Material Issue</div>
+            </div>
+        </div>
+        <div class="header-right">
+            <div class="ef-chip" id="ef-chip" style="display:none">
+                <div class="ef-chip-item">
+                    <span class="ef-chip-label">EF Code</span>
+                    <span class="ef-chip-value" id="ef-code-display">—</span>
+                </div>
+                <div class="ef-chip-sep"></div>
+                <div class="ef-chip-item">
+                    <span class="ef-chip-label">Function Head</span>
+                    <span class="ef-chip-head" id="ef-head-display">—</span>
+                </div>
+            </div>
+            <div class="admin-badge" id="admin-badge" style="display:none">👑 Administrator</div>
+        </div>
+    </div>
+
+    <!-- MAIN -->
+    <div class="main">
+
+        <!-- STATS -->
+        <div class="stats-grid">
+            <div class="stat-card">
+                <div class="stat-label">Total Months</div>
+                <div class="stat-value" id="stat-months">—</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-label">Total Batches</div>
+                <div class="stat-value" id="stat-batches">—</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-label">Total MRs</div>
+                <div class="stat-value" id="stat-mr">—</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-label">Total POs</div>
+                <div class="stat-value" id="stat-po">—</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-label">Total GRNs</div>
+                <div class="stat-value" id="stat-grn">—</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-label">Material Issued</div>
+                <div class="stat-value" id="stat-issued">—</div>
+            </div>
+        </div>
+
+        <!-- FILTERS -->
+        <div class="filters-card">
+            <div class="filters-row">
+
+                <div class="filter-group admin-ef admin-ef-wrap" id="admin-ef-wrap">
+                    <label>👑 Employee Function</label>
+                    <select id="admin-ef-select" onchange="onAdminEFChange()">
+                        <option value="">All Employee Functions</option>
+                    </select>
+                </div>
+
+                <div class="filter-group">
+                    <label>Year</label>
+                    <select id="year-filter" onchange="loadData()">
+                        <option value="2024">2024</option>
+                        <option value="2025">2025</option>
+                        <option value="2026" selected>2026</option>
+                        <option value="2027">2027</option>
+                    </select>
+                </div>
+
+                <div class="filter-group">
+                    <label>Month</label>
+                    <select id="month-filter" onchange="loadData()">
+                        <option value="">All Months</option>
+                        <option>January</option>
+                        <option>February</option>
+                        <option>March</option>
+                        <option>April</option>
+                        <option>May</option>
+                        <option>June</option>
+                        <option>July</option>
+                        <option>August</option>
+                        <option>September</option>
+                        <option>October</option>
+                        <option>November</option>
+                        <option>December</option>
+                    </select>
+                </div>
+
+                <div>
+                    <button class="btn btn-refresh" onclick="loadData()">🔄 Refresh</button>
+                </div>
+                <div>
+                    <button class="btn btn-export" onclick="exportCSV()">📥 Export CSV</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- TABLE -->
+        <div class="table-card">
+            <div class="table-wrap">
+                <div id="recon-table">
+                    <div class="state-box">
+                        <div class="icon">⏳</div>Loading reconciliation data...
+                    </div>
+                </div>
+            </div>
+        </div>
+
+    </div>
+
+    <script>
+        let allData = [];
+        let isAdmin = false;
+        let currentEF = '';
+
+        function getCsrfToken() {
+            let token = window.csrf_token || '';
+            if (!token || token === 'None') {
+                document.cookie.split(';').forEach(c => {
+                    c = c.trim();
+                    if (c.startsWith('csrf_token=')) token = decodeURIComponent(c.split('=')[1]);
+                });
+            }
+            return token;
+        }
+
+        async function frappe_call(method, args) {
+            const res = await fetch(`/api/method/${method}`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-Frappe-CSRF-Token': getCsrfToken(),
+                    'X-Requested-With': 'XMLHttpRequest',
+                    'Accept': 'application/json'
+                },
+                credentials: 'same-origin',
+                body: JSON.stringify(args)
+            });
+            const data = await res.json();
+            if (data.exc) throw new Error(data.exc);
+            return data.message;
+        }
+
+        async function init() {
+            try {
+                const session = await frappe_call('frappe.auth.get_logged_user', {});
+                isAdmin = (session === 'Administrator');
+            } catch (e) { }
+
+            const params = new URLSearchParams(window.location.search);
+            currentEF = params.get('employee_function') || '';
+
+            if (isAdmin) {
+                document.getElementById('admin-badge').style.display = 'flex';
+                document.getElementById('admin-ef-wrap').style.display = 'flex';
+                await loadAdminEFList();
+                if (currentEF) {
+                    document.getElementById('admin-ef-select').value = currentEF;
+                    await fetchAndShowEFHeader(currentEF);
+                }
+            } else {
+                if (currentEF) {
+                    document.getElementById('ef-chip').style.display = 'flex';
+                    await fetchAndShowEFHeader(currentEF);
+                }
+            }
+
+            await loadData();
+        }
+
+        async function loadAdminEFList() {
+            try {
+                const efs = await frappe_call('frappe.client.get_list', {
+                    doctype: 'Employee Function',
+                    fields: ['name', 'function_name'],
+                    limit: 500,
+                    order_by: 'name asc'
+                });
+                const sel = document.getElementById('admin-ef-select');
+                (efs || []).forEach(ef => {
+                    const opt = document.createElement('option');
+                    opt.value = ef.name;
+                    opt.textContent = `${ef.name} — ${ef.function_name || ''}`;
+                    sel.appendChild(opt);
+                });
+            } catch (e) { }
+        }
+
+        async function fetchAndShowEFHeader(efName) {
+            try {
+                const ef = await frappe_call('frappe.client.get', { doctype: 'Employee Function', name: efName });
+                document.getElementById('ef-code-display').textContent = ef.name || efName;
+                let headName = ef.function_head || '—';
+                try {
+                    const user = await frappe_call('frappe.client.get_value', {
+                        doctype: 'User',
+                        filters: { name: ef.function_head },
+                        fieldname: 'full_name'
+                    });
+                    if (user && user.full_name) headName = user.full_name;
+                } catch (e) { }
+                document.getElementById('ef-head-display').textContent = headName;
+                document.getElementById('ef-chip').style.display = 'flex';
+            } catch (e) { }
+        }
+
+        async function onAdminEFChange() {
+            const selected = document.getElementById('admin-ef-select').value;
+            currentEF = selected;
+            if (selected) await fetchAndShowEFHeader(selected);
+            else document.getElementById('ef-chip').style.display = 'none';
+            await loadData();
+        }
+
+        async function loadData() {
+            document.getElementById('recon-table').innerHTML = '<div class="state-box"><div class="icon">⏳</div>Loading...</div>';
+
+            const year = document.getElementById('year-filter').value;
+            const month = document.getElementById('month-filter').value;
+
+            try {
+                const args = { year, month };
+                if (currentEF) args.employee_function = currentEF;
+
+                const data = await frappe_call(
+                    'custom_batch_planning.api.reconcillation.get_monthly_reconciliation', args
+                );
+
+                if (!data || data.length === 0) {
+                    document.getElementById('recon-table').innerHTML =
+                        '<div class="state-box"><div class="icon">✅</div>No data found.</div>';
+                    updateStats([]);
+                    return;
+                }
+
+                allData = data;
+                renderTable(data);
+                updateStats(data);
+
+            } catch (e) {
+                document.getElementById('recon-table').innerHTML =
+                    `<div class="state-box" style="color:var(--red)"><div class="icon">❌</div>${e.message}</div>`;
+            }
+        }
+
+        function bdg(val, type) {
+            if (!val || val === 0) return `<span class="bdg bdg-zero">0</span>`;
+            return `<span class="bdg bdg-${type}">${val}</span>`;
+        }
+
+        function renderTable(data) {
+            const totals = {
+                total_slots: 0, booked_slots: 0, vacant_slots: 0,
+                batches_planned: 0, batches_cancelled: 0,
+                mr_count: 0, po_count: 0, grn_count: 0, grn_qty: 0,
+                pi_count: 0, ma_count: 0, po_pending: 0,
+                issue_count: 0, issued_qty: 0, issued_value: 0
+            };
+
+            let rows = '';
+            data.forEach(row => {
+                Object.keys(totals).forEach(k => { totals[k] += parseFloat(row[k] || 0); });
+
+                rows += `
+                <tr>
+                    <td class="month-cell">📅 ${row.month}</td>
+                    <td>${bdg(row.total_slots, 'green')}</td>
+                    <td>${bdg(row.booked_slots, 'dark')}</td>
+                    <td>${bdg(row.vacant_slots, row.vacant_slots > 0 ? 'orange' : 'zero')}</td>
+                    <td>${bdg(row.batches_planned, 'green')}</td>
+                    <td>${bdg(row.batches_cancelled, row.batches_cancelled > 0 ? 'red' : 'zero')}</td>
+                    <td>${bdg(row.mr_count, 'dark')}</td>
+                    <td>${bdg(row.po_count, 'green')}</td>
+                    <td>${bdg(row.grn_count, 'dark')}</td>
+                    <td><span class="bdg bdg-green">${row.grn_qty}</span></td>
+                    <td>${bdg(row.pi_count, 'dark')}</td>
+                    <td>${bdg(row.ma_count, 'green')}</td>
+                    <td>${bdg(row.po_pending, row.po_pending > 0 ? 'red' : 'zero')}</td>
+                    <td>${bdg(row.issue_count || 0, 'orange')}</td>
+                    <td><span class="bdg bdg-dark">${row.issued_qty || 0}</span></td>
+                    <td><span class="bdg bdg-green">₹${row.issued_value || 0}</span></td>
+                </tr>`;
+            });
+
+            document.getElementById('recon-table').innerHTML = `
+            <table>
+                <thead>
+                    <tr>
+                        <th style="text-align:left;min-width:130px">Month</th>
+                        <th title="Total Slots Available">Slots Avl</th>
+                        <th title="Slots Booked">Booked</th>
+                        <th title="Vacant Slots">Vacant</th>
+                        <th title="Batches Planned">Planned</th>
+                        <th title="Batches Cancelled">Cancelled</th>
+                        <th title="Material Requests">MRs</th>
+                        <th title="Purchase Orders">POs</th>
+                        <th title="Goods Receipt Notes">GRNs</th>
+                        <th title="GRN Total Qty">GRN Qty</th>
+                        <th title="Purchase Invoices">PIs</th>
+                        <th title="Material Allocations">MAs</th>
+                        <th title="PO Delivery Pending">PO Pending</th>
+                        <th title="Material Issue Count">Issues</th>
+                        <th title="Issued Quantity">Issued Qty</th>
+                        <th title="Issued Value">Issued Value</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    ${rows}
+                    <tr class="total-row">
+                        <td style="text-align:left;font-weight:800">📊 TOTAL</td>
+                        <td>${totals.total_slots}</td>
+                        <td>${totals.booked_slots}</td>
+                        <td>${totals.vacant_slots}</td>
+                        <td>${totals.batches_planned}</td>
+                        <td>${totals.batches_cancelled}</td>
+                        <td>${totals.mr_count}</td>
+                        <td>${totals.po_count}</td>
+                        <td>${totals.grn_count}</td>
+                        <td>${totals.grn_qty.toFixed(2)}</td>
+                        <td>${totals.pi_count}</td>
+                        <td>${totals.ma_count}</td>
+                        <td>${totals.po_pending}</td>
+                        <td>${totals.issue_count}</td>
+                        <td>${totals.issued_qty.toFixed(2)}</td>
+                        <td>₹${totals.issued_value.toFixed(2)}</td>
+                    </tr>
+                </tbody>
+            </table>`;
+        }
+
+        function updateStats(data) {
+            let batches = 0, mr = 0, po = 0, grn = 0, issued = 0;
+            for (const r of data) {
+                batches += r.batches_planned || 0;
+                mr += r.mr_count || 0;
+                po += r.po_count || 0;
+                grn += r.grn_count || 0;
+                issued += r.issue_count || 0;
+            }
+            document.getElementById('stat-months').innerText = data.length || '—';
+            document.getElementById('stat-batches').innerText = batches || '—';
+            document.getElementById('stat-mr').innerText = mr || '—';
+            document.getElementById('stat-po').innerText = po || '—';
+            document.getElementById('stat-grn').innerText = grn || '—';
+            document.getElementById('stat-issued').innerText = issued || '—';
+        }
+
+        function exportCSV() {
+            if (!allData.length) return alert('No data to export.');
+            const headers = ['Month', 'Slots Available', 'Booked', 'Vacant', 'Batches Planned',
+                'Cancelled', 'MRs', 'POs', 'GRNs', 'GRN Qty', 'PIs', 'MAs', 'PO Pending',
+                'Issues', 'Issued Qty', 'Issued Value'];
+            let csv = headers.join(',') + '\n';
+            allData.forEach(r => {
+                csv += [r.month, r.total_slots, r.booked_slots, r.vacant_slots,
+                r.batches_planned, r.batches_cancelled, r.mr_count,
+                r.po_count, r.grn_count, r.grn_qty, r.pi_count,
+                r.ma_count, r.po_pending,
+                r.issue_count || 0, r.issued_qty || 0, r.issued_value || 0
+                ].join(',') + '\n';
+            });
+            const blob = new Blob([csv], { type: 'text/csv' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `monthly-reconciliation-${document.getElementById('year-filter').value}.csv`;
+            a.click();
+            URL.revokeObjectURL(url);
+        }
+
+        window.onload = init;
+    </script>
+</body>
+
+</html>

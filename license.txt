@@ -1,21 +1,94 @@
-MIT License
+# PROPRIETARY SOFTWARE LICENSE AGREEMENT
 
-Copyright (c) [year] [fullname]
+Copyright © 2026 Shivam Singh.
+All Rights Reserved.
 
-Permission is hereby granted, free of charge, to any person obtaining a copy
-of this software and associated documentation files (the "Software"), to deal
-in the Software without restriction, including without limitation the rights
-to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-copies of the Software, and to permit persons to whom the Software is
-furnished to do so, subject to the following conditions:
+This Software, including but not limited to all source code, scripts, modules, APIs, workflows, business logic, database structures, configurations, user interfaces, documentation, designs, architecture, and associated materials (collectively referred to as the “Software”), is the exclusive intellectual property of Shivam Singh and is protected under applicable copyright, intellectual property, trade secret, and software protection laws.
 
-The above copyright notice and this permission notice shall be included in all
-copies or substantial portions of the Software.
+---
 
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-SOFTWARE.
+# 1. LICENSE GRANT
+
+Subject to compliance with the terms of this Agreement, a limited, non-exclusive, non-transferable, non-sublicensable, and revocable license is granted solely to the authorized client or organization for internal business use only.
+This Agreement grants usage rights only and does not transfer ownership, copyright, or any intellectual property rights in the Software.
+
+---
+
+# 2. RESTRICTIONS
+
+Unless explicitly authorized in writing by the copyright holder, the user SHALL NOT:
+
+* Copy, duplicate, reproduce, or redistribute the Software in whole or in part
+* Modify, alter, adapt, reverse engineer, decompile, disassemble, or derive source code from the Software
+* Create derivative works based on the Software
+* Sell, sublicense, rent, lease, host, publish, or commercially exploit the Software
+* Use the Software in SaaS, cloud-hosted, multi-tenant, reseller, or commercial service platforms
+* Share, disclose, or expose source code or implementation details to third parties
+* Remove, modify, bypass, or obscure copyright notices, proprietary labels, or licensing mechanisms
+* Use the Software to develop competing software, products, or services
+* Transfer this license to another individual or organization without prior written approval
+
+Any unauthorized use, reproduction, modification, distribution, or commercial exploitation of the Software shall constitute a material violation of this Agreement and applicable intellectual property laws.
+
+---
+
+# 3. CONFIDENTIALITY
+
+The Software contains confidential and proprietary information, trade secrets, implementation methodologies, workflows, and business logic belonging exclusively to Shivam Singh.
+The user agrees to maintain strict confidentiality and shall not disclose, publish, distribute, or expose any part of the Software, source code, architecture, workflows, algorithms, APIs, or technical implementation details to any third party without prior written consent.
+
+---
+
+# 4. OWNERSHIP & INTELLECTUAL PROPERTY
+
+The Software is licensed, not sold.
+All rights, title, and interest in and to the Software, including all copyrights, patents, trademarks, trade secrets, source code, workflows, APIs, database structures, algorithms, and custom implementations shall remain the sole and exclusive property of Shivam Singh.
+No implied rights or licenses are granted under this Agreement.
+
+---
+
+# 5. LEGAL ENFORCEMENT
+
+Any unauthorized access, copying, modification, distribution, reverse engineering, resale, hosting, sublicensing, or misuse of the Software may result in:
+
+* Immediate termination of the license without notice
+* Civil legal proceedings
+* Monetary damages and compensation claims
+* Recovery of legal costs and attorney fees
+* Temporary or permanent injunctive relief
+* Criminal prosecution where applicable under intellectual property, copyright, cybercrime, and information technology laws
+
+The copyright holder reserves the unrestricted right to pursue the maximum legal remedies available under applicable law.
+
+---
+
+# 6. TERMINATION
+
+This license shall automatically terminate if the user violates any provision of this Agreement.
+Upon termination, the user must immediately cease all use of the Software and permanently destroy all copies, backups, source code, documentation, and related materials in their possession or control.
+
+---
+
+# 7. NO WARRANTY
+
+THE SOFTWARE IS PROVIDED “AS IS” AND “AS AVAILABLE” WITHOUT WARRANTIES OF ANY KIND, WHETHER EXPRESS, IMPLIED, STATUTORY, OR OTHERWISE, INCLUDING BUT NOT LIMITED TO WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE, SECURITY, PERFORMANCE, AVAILABILITY, OR NON-INFRINGEMENT.
+
+---
+
+# 8. LIMITATION OF LIABILITY
+
+IN NO EVENT SHALL THE AUTHOR OR COPYRIGHT HOLDER BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, CONSEQUENTIAL, EXEMPLARY, OR PUNITIVE DAMAGES, INCLUDING BUT NOT LIMITED TO LOSS OF DATA, BUSINESS INTERRUPTION, LOSS OF PROFITS, SECURITY BREACHES, OR SYSTEM FAILURES ARISING OUT OF OR RELATED TO THE USE OR INABILITY TO USE THE SOFTWARE.
+
+---
+
+# 9. GOVERNING LAW & JURISDICTION
+
+This Agreement shall be governed and interpreted in accordance with the laws of India.
+Any disputes, claims, or legal proceedings arising out of or relating to this Agreement shall be subject to the exclusive jurisdiction of the courts located in Mumbai, Maharashtra, India.
+
+---
+
+# 10. ACCEPTANCE OF TERMS
+
+By installing, accessing, copying, modifying, deploying, or using the Software, the user acknowledges that they have read, understood, and agreed to be legally bound by the terms and conditions of this License Agreement.
+Unauthorized use of the Software is strictly prohibited and may result in severe civil and criminal penalties under applicable law.

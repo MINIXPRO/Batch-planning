@@ -1,0 +1,187 @@
+{
+ "actions": [],
+ "allow_rename": 1,
+ "autoname": "hash",
+ "creation": "2026-03-13 10:16:56.852563",
+ "default_view": "List",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "field_order": [
+  "details_tab",
+  "employee_function_details_section",
+  "employee_function",
+  "slot_master",
+  "total_batch_capacity",
+  "batch_start_date",
+  "column_break_ycjs",
+  "function_head_name",
+  "total_batch_remained",
+  "batch_end_date",
+  "total_slot_opening_section",
+  "total_batches_planned",
+  "column_break_ryfk",
+  "total_slots_planned",
+  "section_break_ocka",
+  "created_by",
+  "column_break_tbke",
+  "date",
+  "section_break_xkfb",
+  "slot_booking",
+  "calender_tab",
+  "calenders"
+ ],
+ "fields": [
+  {
+   "depends_on": "eval:frappe.session.user==\"Administrator\" || !(frappe.user.has_role(\"Doctor\") || frappe.user.has_role(\"Hospital Admin\"))",
+   "fieldname": "details_tab",
+   "fieldtype": "Tab Break",
+   "label": "Details"
+  },
+  {
+   "fieldname": "employee_function_details_section",
+   "fieldtype": "Section Break",
+   "label": "Employee Function Details"
+  },
+  {
+   "fieldname": "employee_function",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Employee Function",
+   "options": "Employee Function",
+   "reqd": 1
+  },
+  {
+   "fieldname": "slot_master",
+   "fieldtype": "Link",
+   "label": "Slot Master",
+   "options": "Slot Master List",
+   "reqd": 1
+  },
+  {
+   "fieldname": "total_batch_capacity",
+   "fieldtype": "Int",
+   "label": "Total Batch Capacity",
+   "read_only": 1
+  },
+  {
+   "fieldname": "batch_start_date",
+   "fieldtype": "Date",
+   "label": "Batch Start Date",
+   "read_only": 1
+  },
+  {
+   "fieldname": "column_break_ycjs",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fetch_from": "employee_function.function_head_name",
+   "fieldname": "function_head_name",
+   "fieldtype": "Data",
+   "label": "Function Head Name"
+  },
+  {
+   "fieldname": "total_batch_remained",
+   "fieldtype": "Int",
+   "label": "Total Batch Remained",
+   "read_only": 1
+  },
+  {
+   "fieldname": "batch_end_date",
+   "fieldtype": "Date",
+   "label": "Batch End Date",
+   "read_only": 1
+  },
+  {
+   "fieldname": "total_slot_opening_section",
+   "fieldtype": "Section Break",
+   "label": "Total Slot Opening",
+   "read_only": 1
+  },
+  {
+   "fieldname": "total_batches_planned",
+   "fieldtype": "Int",
+   "label": "Total Batches Planned",
+   "read_only": 1
+  },
+  {
+   "fieldname": "column_break_ryfk",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "total_slots_planned",
+   "fieldtype": "Int",
+   "label": "Total Slots Planned",
+   "read_only": 1
+  },
+  {
+   "fieldname": "section_break_ocka",
+   "fieldtype": "Section Break"
+  },
+  {
+   "fieldname": "created_by",
+   "fieldtype": "Link",
+   "label": "Created By",
+   "options": "User",
+   "read_only": 1
+  },
+  {
+   "fieldname": "column_break_tbke",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "date",
+   "fieldtype": "Date",
+   "label": "Transaction Date",
+   "read_only": 1
+  },
+  {
+   "fieldname": "section_break_xkfb",
+   "fieldtype": "Section Break"
+  },
+  {
+   "fieldname": "slot_booking",
+   "fieldtype": "Table",
+   "label": "Slot Booking",
+   "options": "Slot Booking CT"
+  },
+  {
+   "fieldname": "calender_tab",
+   "fieldtype": "Tab Break",
+   "label": "Calender"
+  },
+  {
+   "fieldname": "calenders",
+   "fieldtype": "HTML",
+   "label": "Calenders"
+  }
+ ],
+ "grid_page_length": 50,
+ "index_web_pages_for_search": 1,
+ "links": [],
+ "modified": "2026-05-04 17:23:18.857117",
+ "modified_by": "Administrator",
+ "module": "Custom Batch Planning",
+ "name": "Slot Opening",
+ "naming_rule": "Expression",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "System Manager",
+   "share": 1,
+   "write": 1
+  }
+ ],
+ "row_format": "Dynamic",
+ "rows_threshold_for_grid_search": 20,
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": []
+}

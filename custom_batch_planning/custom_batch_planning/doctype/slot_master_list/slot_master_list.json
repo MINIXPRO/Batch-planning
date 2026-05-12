@@ -1,0 +1,128 @@
+{
+ "actions": [],
+ "allow_rename": 1,
+ "autoname": "SM-.YY.MM.-.####",
+ "creation": "2026-04-18 16:56:16.510491",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "field_order": [
+  "section_break_equi",
+  "amended_from",
+  "employee_function",
+  "batch_capacity",
+  "transaction_date",
+  "column_break_bwff",
+  "employee_function_head_name",
+  "batch_start_date",
+  "batch_end_date",
+  "created_by",
+  "naming_series"
+ ],
+ "fields": [
+  {
+   "fieldname": "section_break_equi",
+   "fieldtype": "Section Break",
+   "label": "Slot Master Details"
+  },
+  {
+   "fieldname": "amended_from",
+   "fieldtype": "Link",
+   "label": "Amended From",
+   "no_copy": 1,
+   "options": "Slot Master List",
+   "print_hide": 1,
+   "read_only": 1,
+   "search_index": 1
+  },
+  {
+   "fieldname": "employee_function",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "label": "Employee Function",
+   "options": "Employee Function",
+   "reqd": 1
+  },
+  {
+   "fieldname": "batch_capacity",
+   "fieldtype": "Int",
+   "in_list_view": 1,
+   "label": "Batch Capacity",
+   "non_negative": 1,
+   "reqd": 1
+  },
+  {
+   "fieldname": "transaction_date",
+   "fieldtype": "Datetime",
+   "label": "Transaction Date",
+   "options": "Today"
+  },
+  {
+   "fieldname": "column_break_bwff",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fetch_from": "employee_function.function_head_name",
+   "fieldname": "employee_function_head_name",
+   "fieldtype": "Data",
+   "label": "Employee Function Head Name"
+  },
+  {
+   "fieldname": "batch_start_date",
+   "fieldtype": "Date",
+   "in_list_view": 1,
+   "label": "Batch Start Date",
+   "reqd": 1
+  },
+  {
+   "fieldname": "batch_end_date",
+   "fieldtype": "Date",
+   "in_list_view": 1,
+   "label": "Batch End Date",
+   "reqd": 1
+  },
+  {
+   "fieldname": "created_by",
+   "fieldtype": "Link",
+   "label": "Created By",
+   "options": "User"
+  },
+  {
+   "default": "SM-.YY.MM.-.####",
+   "fieldname": "naming_series",
+   "fieldtype": "Select",
+   "hidden": 1,
+   "label": "Naming Series",
+   "options": "SM-.YY.MM.-.####"
+  }
+ ],
+ "grid_page_length": 50,
+ "index_web_pages_for_search": 1,
+ "is_submittable": 1,
+ "links": [],
+ "modified": "2026-04-18 16:57:49.513337",
+ "modified_by": "Administrator",
+ "module": "Custom Batch Planning",
+ "name": "Slot Master List",
+ "naming_rule": "Expression (old style)",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "System Manager",
+   "share": 1,
+   "submit": 1,
+   "write": 1
+  }
+ ],
+ "row_format": "Dynamic",
+ "rows_threshold_for_grid_search": 20,
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": []
+}

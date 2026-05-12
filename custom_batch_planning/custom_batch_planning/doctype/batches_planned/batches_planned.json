@@ -1,0 +1,189 @@
+{
+ "actions": [],
+ "allow_rename": 1,
+ "autoname": "field:batch_planning_id",
+ "creation": "2026-04-14 17:31:18.348566",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "field_order": [
+  "details_section",
+  "batch_planning_id",
+  "slot_opening_id",
+  "employee_function",
+  "employee_name",
+  "month",
+  "batch_type",
+  "finished_item",
+  "slot_booking_date",
+  "amended_from",
+  "batch_creation",
+  "bom_components_tab",
+  "bom_items_list_section",
+  "bom_items",
+  "materials_planning_tab",
+  "material_planning",
+  "stock_entry_tab",
+  "stock_entry_details",
+  "project",
+  "project_name"
+ ],
+ "fields": [
+  {
+   "fieldname": "details_section",
+   "fieldtype": "Section Break",
+   "label": "Details"
+  },
+  {
+   "fieldname": "batch_planning_id",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "Batch Planning ID",
+   "read_only": 1,
+   "reqd": 1,
+   "unique": 1
+  },
+  {
+   "fieldname": "slot_opening_id",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "label": "Slot Opening ID",
+   "options": "Slot Opening",
+   "read_only": 1
+  },
+  {
+   "fieldname": "employee_function",
+   "fieldtype": "Link",
+   "label": "Employee Function",
+   "options": "Employee Function",
+   "read_only": 1
+  },
+  {
+   "fetch_from": "employee_function.function_head_name",
+   "fieldname": "employee_name",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "Employee Name",
+   "read_only": 1
+  },
+  {
+   "fieldname": "month",
+   "fieldtype": "Data",
+   "label": "Month",
+   "read_only": 1
+  },
+  {
+   "fieldname": "batch_type",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "label": "Batch Type",
+   "options": "\nManufacturing\nProcess Development\nMachine Trial",
+   "read_only": 1
+  },
+  {
+   "fieldname": "finished_item",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "label": "Finished Item",
+   "options": "Item",
+   "read_only": 1
+  },
+  {
+   "fieldname": "slot_booking_date",
+   "fieldtype": "Data",
+   "label": "Slot Booking Date",
+   "read_only": 1
+  },
+  {
+   "fieldname": "amended_from",
+   "fieldtype": "Link",
+   "hidden": 1,
+   "label": "Amended From",
+   "options": "Batches Planned",
+   "read_only": 1
+  },
+  {
+   "fieldname": "batch_creation",
+   "fieldtype": "Link",
+   "label": "Batch Creation",
+   "options": "Batch Creation",
+   "read_only": 1
+  },
+  {
+   "fieldname": "bom_components_tab",
+   "fieldtype": "Tab Break",
+   "label": "Bom Components"
+  },
+  {
+   "fieldname": "bom_items_list_section",
+   "fieldtype": "Section Break",
+   "label": "BOM Items List"
+  },
+  {
+   "fieldname": "bom_items",
+   "fieldtype": "HTML",
+   "label": "BOM Items"
+  },
+  {
+   "fieldname": "materials_planning_tab",
+   "fieldtype": "Tab Break",
+   "label": "Materials Planning"
+  },
+  {
+   "fieldname": "material_planning",
+   "fieldtype": "HTML",
+   "label": "Material Planning"
+  },
+  {
+   "fieldname": "stock_entry_tab",
+   "fieldtype": "Tab Break",
+   "label": "Stock Entry"
+  },
+  {
+   "fieldname": "stock_entry_details",
+   "fieldtype": "HTML",
+   "label": "Stock Entry Details"
+  },
+  {
+   "fieldname": "project",
+   "fieldtype": "Link",
+   "label": "Project ID",
+   "options": "Project"
+  },
+  {
+   "fetch_from": "project.project_name",
+   "fieldname": "project_name",
+   "fieldtype": "Data",
+   "label": "Project Name",
+   "read_only": 1
+  }
+ ],
+ "grid_page_length": 50,
+ "index_web_pages_for_search": 1,
+ "is_submittable": 1,
+ "links": [],
+ "modified": "2026-05-04 23:18:40.264229",
+ "modified_by": "Administrator",
+ "module": "Custom Batch Planning",
+ "name": "Batches Planned",
+ "naming_rule": "By fieldname",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "System Manager",
+   "share": 1,
+   "write": 1
+  }
+ ],
+ "row_format": "Dynamic",
+ "rows_threshold_for_grid_search": 20,
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": []
+}
