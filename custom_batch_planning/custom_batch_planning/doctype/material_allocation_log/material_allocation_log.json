@@ -13,7 +13,9 @@
   "project_id",
   "project_name",
   "ma_details_section",
-  "ma_logs"
+  "ma_logs",
+  "allocation_details_section",
+  "table"
  ],
  "fields": [
   {
@@ -65,12 +67,23 @@
    "fieldtype": "Table",
    "label": "MA Logs",
    "options": "Material Allocation Item"
+  },
+  {
+   "fieldname": "allocation_details_section",
+   "fieldtype": "Section Break",
+   "label": "Allocation Details"
+  },
+  {
+   "fieldname": "table",
+   "fieldtype": "Table",
+   "label": "Table",
+   "options": "Allocation History"
   }
  ],
  "grid_page_length": 50,
  "index_web_pages_for_search": 1,
  "links": [],
- "modified": "2026-05-13 12:27:17.125946",
+ "modified": "2026-05-15 11:48:57.539438",
  "modified_by": "Administrator",
  "module": "Custom Batch Planning",
  "name": "Material Allocation Log",

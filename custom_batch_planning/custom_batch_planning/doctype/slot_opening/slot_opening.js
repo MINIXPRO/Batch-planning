@@ -1,854 +1,1300 @@
-// ─────────────────────────────────────────────
-// Slot Opening — Complete Merged Client Script
-// ─────────────────────────────────────────────
+// ═════════════════════════════════════════════════════════════════════════════
+// Slot Opening — Complete Client Script
+// Author  : Shivam Singh & contributors
+// Purpose : Handles all form logic for Slot Opening doctype
+//           → Field triggers, validations, capacity tracking, calendar
+// ═════════════════════════════════════════════════════════════════════════════
 
-frappe.ui.form.on('Slot Opening', {
+// ─────────────────────────────────────────────────────────────────────────────
+// SECTION 1 — Main Form Events
+// ─────────────────────────────────────────────────────────────────────────────
 
-    refresh: function (frm) {
-        frm.page.clear_custom_actions();
-        frm.set_df_property('total_batch_remained', 'hidden', 0);
-        frm.refresh_field('total_batch_remained');
+frappe.ui.form.on("Slot Opening", {
+	onload: function (frm) {
+		if (frm.is_new() && frm.doc.slot_master) {
+			frm.trigger('slot_master');
+		}
+	},
 
-        // ── Capacity Button ──
-        frm.add_custom_button('📊 Capacity Remained', function () {
-            if (!frm.doc.slot_master) {
-                frappe.msgprint('Please select a Slot Master first!');
-                return;
-            }
-            frappe.call({
-                method: 'custom_batch_planning.custom_batch_planning.doctype.slot_opening.slot_opening.get_sct_details',
-                args: { slot_master: frm.doc.slot_master },
-                callback: function (r) {
-                    if (!r.message || !r.message.length) {
-                        frappe.msgprint('No Slot Capacity Tracker found!');
-                        return;
-                    }
-                    let rows = r.message.sort((a, b) => a.date > b.date ? 1 : -1)
-                        .map(d => `
-                    <tr> 
-        <td>${d.date.split('-').reverse().join('-')}</td>
-        <td>${d.total_capacity}</td>
-        <td>${d.capacity_booked}</td>
-        <td style="color:${d.capacity_available > 0 ? 'green' : 'red'}; font-weight:bold;">
-            ${d.capacity_available}
-        </td>
-    </tr>
-`).join('');
-                    frappe.msgprint({
-                        title: 'Capacity Remained',
-                        message: `
-                        <table class="table table-bordered" style="width:100%">
-                            <thead style="background:#f0f0f0">
-                                <tr>
-                                    <th>Date</th>
-                                    <th>Total</th>
-                                    <th>Booked</th>
-                                    <th>Available</th>
-                                </tr>
-                            </thead>
-                            <tbody>${rows}</tbody>
-                        </table>
-                    `,
-                        wide: true
-                    });
-                }
-            });
-        });
+	// ── Fires on every form load / save / refresh ──
+	refresh: function (frm) {
+		frm.page.clear_custom_actions();
 
-        // ── Create Batch Button — only for saved docs ──
-        if (!frm.is_new()) {
-            frm.add_custom_button(__('➕ Create Batch'), function () {
-                if (frm.is_dirty()) {
-                    frappe.msgprint(__('Please save the document before creating a Batch.'));
-                    return;
-                }
-                frappe.new_doc('Batch Creation', {
-                    slot_opening: frm.doc.name,
-                    custom_employee_function: frm.doc.employee_function,
-                    custom_project_id: frm.doc.custom_project,
-                    custom_project_name: frm.doc.custom_project_name,
-                    custom_function_head_name: frm.doc.function_head_name,
-                    month: frm.doc.batch_start_date ? new Date(frm.doc.batch_start_date).toLocaleString('en-US', { month: 'long' }) : '',
-                    custom_total_batches_planned: frm.doc.total_batches_planned
-                }).then(() => {
-                    if (!cur_frm) return;
+		// Always show total_batch_remained field
+		frm.set_df_property("total_batch_remained", "hidden", 0);
+		frm.refresh_field("total_batch_remained");
 
-                    // ── Slot Opening Table autofill ──
-                    cur_frm.clear_table('slot_opening_table');
-                    (frm.doc.slot_booking || []).forEach(function (row) {
-                        let nr = cur_frm.add_child('slot_opening_table');
-                        nr.slot_booking_date = row.slot_booking_date;
-                        nr.how_many_slots_per_day = row.how_many_slots_per_day;
-                        nr.total_slots = row.total_slots;
-                        nr.booked_slots = row.booked_slots;
-                        nr.availabe_capacity = row.availabe_capacity;
-                        nr.reason = row.reason;
-                    });
-                    cur_frm.refresh_field('slot_opening_table');
+		// ── Custom Button: Capacity Remained ──
+		// Shows a popup table of all dates with total / booked / available slots
+		// from the Slot Capacity Tracker linked to the selected Slot Master
+		frm.add_custom_button("📊 Capacity Remained", function () {
+			if (!frm.doc.slot_master) {
+				frappe.msgprint("Please select a Slot Master first!");
+				return;
+			}
+			frappe.call({
+				method: "custom_batch_planning.custom_batch_planning.doctype.slot_opening.slot_opening.get_sct_details",
+				args: { slot_master: frm.doc.slot_master },
+				callback: function (r) {
+					if (!r.message || !r.message.length) {
+						frappe.msgprint("No Slot Capacity Tracker found!");
+						return;
+					}
+					let rows = r.message
+						.sort((a, b) => (a.date > b.date ? 1 : -1))
+						.map(
+							(d) => `
+                            <tr>
+                                <td>${d.date.split("-").reverse().join("-")}</td>
+                                <td>${d.total_capacity}</td>
+                                <td>${d.capacity_booked}</td>
+                                <td style="color:${d.capacity_available > 0 ? "green" : "red"}; font-weight:bold;">
+                                    ${d.capacity_available}
+                                </td>
+                            </tr>
+                        `,
+						)
+						.join("");
 
-                    // ── Batch Details autofill ──
-                    cur_frm.clear_table('custom_batch_details');
-                    (frm.doc.slot_booking || []).forEach(function (row) {
-                        let count = parseInt(row.booked_slots) || 0;
-                        for (let i = 0; i < count; i++) {
-                            let child = cur_frm.add_child('custom_batch_details');
-                            child.slot_booking_date = row.slot_booking_date;
-                            child.slot_opening_id = frm.doc.name;
-                            child.reason = row.reason;
-                        }
-                    });
-                    cur_frm.refresh_field('custom_batch_details');
-                });
-            });
-        }
+					frappe.msgprint({
+						title: "Capacity Remained",
+						message: `
+                            <table class="table table-bordered" style="width:100%">
+                                <thead style="background:#f0f0f0">
+                                    <tr>
+                                        <th>Date</th>
+                                        <th>Total</th>
+                                        <th>Booked</th>
+                                        <th>Available</th>
+                                    </tr>
+                                </thead>
+                                <tbody>${rows}</tbody>
+                            </table>
+                        `,
+						wide: true,
+					});
+				},
+			});
+		});
 
-        if (frm.doc.slot_master) {
-            frappe.db.get_value(
-                'Slot Master List',
-                frm.doc.slot_master,
-                ['batch_end_date', 'batch_start_date', 'batch_capacity'],
-                function (data) {
-                    if (data) {
-                        frm.doc.__batch_end_date = data.batch_end_date;
-                        frm.doc.__batch_start_date = data.batch_start_date;
-                        frm.doc.__batch_capacity = data.batch_capacity;
-                    }
-                }
-            );
-            fetch_sct_remaining(frm);
-        }
-        set_slot_master_filter(frm);
-        loadSlotOpeningCalendar(frm);
-    },
+		// ── Custom Button: Create Batch ──
+		// Only shown for saved (non-new) documents
+		// Pre-fills the new Batch Creation doc with data from this Slot Opening
+		let today = frappe.datetime.nowdate();
+		if (!frm.is_new() && frm.doc.batch_end_date && frm.doc.batch_end_date >= today) {
+			frm.add_custom_button(__("➕ Create Batch"), function () {
+				if (frm.is_dirty()) {
+					frappe.msgprint(__("Please save the document before creating a Batch."));
+					return;
+				}
 
-    after_save: function (frm) {
-        if (frm.doc.name.startsWith("SB-")) {
-            frappe.set_route('Form', 'Slot Opening', frm.doc.name);
-            return;
-        }
-        // Name not updated in form yet, fetch from DB by creation
-        frappe.db.get_list('Slot Opening', {
-            filters: { 'creation': frm.doc.creation },
-            fields: ['name'],
-            limit: 1
-        }).then(function (r) {
-            if (r && r.length && r[0].name.startsWith("SB-")) {
-                window.location.href = `/app/slot-opening/${r[0].name}`;
-            }
-        });
-    },
+				frappe
+					.new_doc("Batch Creation", {
+						slot_opening: frm.doc.name,
+						custom_employee_function: frm.doc.employee_function,
+						custom_project_id: frm.doc.custom_project,
+						custom_project_name: frm.doc.custom_project_name,
+						custom_function_head_name: frm.doc.function_head_name,
+						month: frm.doc.batch_start_date
+							? new Date(frm.doc.batch_start_date).toLocaleString("en-US", {
+								month: "long",
+							})
+							: "",
+						custom_total_batches_planned: frm.doc.total_batches_planned,
+					})
+					.then(() => {
+						if (!cur_frm) return;
 
-    employee_function: function (frm) {
-        frm.set_value('slot_master', '');
-        frm.set_value('total_batch_capacity', '');
-        frm.set_value('total_batch_remained', '');
-        frm.set_value('batch_start_date', '');
-        frm.set_value('batch_end_date', '');
-        frm.set_value('custom_project', '');
-        frm.set_value('custom_project_name', '');
-        frm.doc.__batch_end_date = null;
-        frm.doc.__batch_start_date = null;
-        frm.doc.__batch_capacity = null;
-        set_slot_master_filter(frm);
-        loadSlotOpeningCalendar(frm);
-    },
+						// Auto-fill Slot Opening Table in Batch Creation
+						cur_frm.clear_table("slot_opening_table");
+						(frm.doc.slot_booking || []).forEach(function (row) {
+							let nr = cur_frm.add_child("slot_opening_table");
+							nr.slot_booking_date = row.slot_booking_date;
+							nr.how_many_slots_per_day = row.how_many_slots_per_day;
+							nr.total_slots = row.total_slots;
+							nr.booked_slots = row.booked_slots;
+							nr.availabe_capacity = row.availabe_capacity;
+							nr.reason = row.reason;
+						});
+						cur_frm.refresh_field("slot_opening_table");
 
-    slot_master: function (frm) {
-        if (!frm.doc.slot_master) {
-            frm.set_value('total_batch_capacity', '');
-            frm.set_value('total_batch_remained', '');
-            frm.set_value('batch_start_date', '');
-            frm.set_value('batch_end_date', '');
-            frm.set_value('custom_project', '');
-            frm.set_value('custom_project_name', '');
-            frm.doc.__batch_end_date = null;
-            frm.doc.__batch_start_date = null;
-            frm.doc.__batch_capacity = null;
-            return;
-        }
+						// Auto-fill Batch Details — one row per booked slot per date
+						cur_frm.clear_table("custom_batch_details");
+						(frm.doc.slot_booking || []).forEach(function (row) {
+							let count = parseInt(row.booked_slots) || 0;
+							for (let i = 0; i < count; i++) {
+								let child = cur_frm.add_child("custom_batch_details");
+								child.slot_booking_date = row.slot_booking_date;
+								child.slot_opening_id = frm.doc.name;
+								child.reason = row.reason;
+							}
+						});
+						cur_frm.refresh_field("custom_batch_details");
+					});
+			});
+		}
 
-        frappe.db.get_value(
-            'Slot Master List',
-            frm.doc.slot_master,
-            ['batch_capacity', 'batch_end_date', 'batch_start_date', 'custom_project'],
-            function (data) {
-                if (!data) return;
+		// ── If a Slot Master is already selected (e.g. on reload) ──
+		// Re-cache batch dates and refresh remaining capacity
+		// REPLACE this block in refresh:
+		if (frm.doc.slot_master) {
+			frappe.db.get_value(
+				"Slot Master List",
+				frm.doc.slot_master,
+				["batch_end_date", "batch_start_date", "batch_capacity"],
+				function (data) {
+					if (data) {
+						frm.doc.__batch_end_date = data.batch_end_date;
+						frm.doc.__batch_start_date = data.batch_start_date;
+						frm.doc.__batch_capacity = data.batch_capacity;
+					}
+					fetch_sct_remaining(frm);
+					loadSlotOpeningCalendar(frm); // ← MOVED HERE
+				},
+			);
+		} else {
+			loadSlotOpeningCalendar(frm); // ← handles new/empty doc
+		}
+		set_slot_master_filter(frm);
+	},
 
-                frm.doc.__batch_end_date = data.batch_end_date;
-                frm.doc.__batch_start_date = data.batch_start_date;
-                frm.doc.__batch_capacity = data.batch_capacity;
+	// ── After Save: redirect to the auto-named doc if name changed ──
+	after_save: function (frm) {
+		if (frm.doc.name.startsWith("SB-")) {
+			frappe.set_route("Form", "Slot Opening", frm.doc.name);
+			return;
+		}
+		// Name may not be updated in the form object yet — fetch from DB by creation timestamp
+		frappe.db
+			.get_list("Slot Opening", {
+				filters: { creation: frm.doc.creation },
+				fields: ["name"],
+				limit: 1,
+			})
+			.then(function (r) {
+				if (r && r.length && r[0].name.startsWith("SB-")) {
+					window.location.href = `/app/slot-opening/${r[0].name}`;
+				}
+			});
+	},
 
-                let today = frappe.datetime.nowdate();
+	// ── Employee Function changed ──
+	// Clear all dependent fields and re-render calendar with new context
+	employee_function: function (frm) {
+		frm.set_value("slot_master", "");
+		frm.set_value("total_batch_capacity", "");
+		frm.set_value("total_batch_remained", "");
+		frm.set_value("batch_start_date", "");
+		frm.set_value("batch_end_date", "");
+		frm.set_value("custom_project", "");
+		frm.set_value("custom_project_name", "");
+		frm.doc.__batch_end_date = null;
+		frm.doc.__batch_start_date = null;
+		frm.doc.__batch_capacity = null;
+		set_slot_master_filter(frm);
+		loadSlotOpeningCalendar(frm);
+	},
 
-                if (data.batch_end_date && data.batch_end_date < today) {
-                    frappe.msgprint({
-                        title: '⚠️ Slot Master Expired',
-                        message: `The selected Slot Master <b>${frm.doc.slot_master}</b> has expired.`,
-                        indicator: 'red'
-                    });
-                    frm.set_value('slot_master', '');
-                    return;
-                }
+	// ── Slot Master changed ──
+	// Fetches batch dates + project from Slot Master List
+	// Then auto-fills slot_booking child table from SCT
+	// Finally loads the calendar (AFTER project is confirmed set)
+	slot_master: function (frm) {
+		// Enforce employee_function first
+		if (frm.doc.slot_master && !frm.doc.employee_function) {
+			frappe.msgprint({
+				title: __("Missing Employee Function"),
+				message: __(
+					"Please select an Employee Function first before selecting a Slot Master.",
+				),
+				indicator: "orange",
+			});
+			frm.set_value("slot_master", "");
+			return;
+		}
 
-                frm.set_value('batch_start_date', data.batch_start_date);
-                frm.set_value('batch_end_date', data.batch_end_date);
-                frm.set_value('custom_project', data.custom_project);
-                if (data.custom_project) {
-                    frappe.db.get_value('Project', data.custom_project, 'project_name', function (p_data) {
-                        if (p_data && p_data.project_name) {
-                            frm.set_value('custom_project_name', p_data.project_name);
-                        } else {
-                            frm.set_value('custom_project_name', '');
-                        }
-                    });
-                } else {
-                    frm.set_value('custom_project_name', '');
-                }
+		// Cleared — reset all dependent fields
+		if (!frm.doc.slot_master) {
+			frm.set_value("total_batch_capacity", "");
+			frm.set_value("total_batch_remained", "");
+			frm.set_value("batch_start_date", "");
+			frm.set_value("batch_end_date", "");
+			frm.set_value("custom_project", "");
+			frm.set_value("custom_project_name", "");
+			frm.doc.__batch_end_date = null;
+			frm.doc.__batch_start_date = null;
+			frm.doc.__batch_capacity = null;
+			loadSlotOpeningCalendar(frm);
+			return;
+		}
 
-                let total_capacity = calculate_total_capacity(
-                    data.batch_start_date,
-                    data.batch_end_date,
-                    data.batch_capacity
-                );
-                frm.set_value('total_batch_capacity', total_capacity);
-                calculate_totals(frm);
-                fetch_sct_remaining(frm);
+		frappe.db.get_value(
+			"Slot Master List",
+			frm.doc.slot_master,
+			["batch_capacity", "batch_end_date", "batch_start_date", "custom_project"],
+			function (data) {
+				if (!data) return;
 
-                // Auto-fill slot_booking rows only where capacity_available > 0
-                frappe.call({
-                    method: 'custom_batch_planning.custom_batch_planning.doctype.slot_opening.slot_opening.get_sct_details',
-                    args: { slot_master: frm.doc.slot_master },
-                    callback: function (r) {
-                        if (!r.message || !r.message.length) return;
+				// Cache batch meta on the form object for child-table validators
+				frm.doc.__batch_end_date = data.batch_end_date;
+				frm.doc.__batch_start_date = data.batch_start_date;
+				frm.doc.__batch_capacity = data.batch_capacity;
 
-                        let available_dates = r.message
-                            .sort((a, b) => a.date > b.date ? 1 : -1);
+				// Reject expired Slot Masters
+				let today = frappe.datetime.nowdate();
+				if (data.batch_end_date && data.batch_end_date < today) {
+					frappe.msgprint({
+						title: "⚠️ Slot Master Expired",
+						message: `The selected Slot Master <b>${frm.doc.slot_master}</b> has expired.`,
+						indicator: "red",
+					});
+					frm.set_value("slot_master", "");
+					return;
+				}
 
-                        if (!available_dates.length) return;
+				// Populate batch date fields
+				frm.set_value("batch_start_date", data.batch_start_date);
+				frm.set_value("batch_end_date", data.batch_end_date);
+				frm.set_value("custom_project", data.custom_project);
 
-                        frm.doc.slot_booking = [];
-                        frm.refresh_field('slot_booking');
+				if (data.custom_project) {
+					// Fetch project name then load calendar AFTER it is confirmed set
+					// ⚠️ Calendar must be called here — not outside — so custom_project
+					//    is guaranteed to be on frm.doc before the SCT filter runs
+					frappe.db.get_value(
+						"Project",
+						data.custom_project,
+						"project_name",
+						function (p_data) {
+							if (p_data && p_data.project_name) {
+								frm.set_value("custom_project_name", p_data.project_name);
+							} else {
+								frm.set_value("custom_project_name", "");
+							}
+							// ✅ Project is now set — safe to render calendar
+							loadSlotOpeningCalendar(frm);
+						},
+					);
+				} else {
+					frm.set_value("custom_project_name", "");
+					// No project linked — calendar will show "No Project Linked" state
+					loadSlotOpeningCalendar(frm);
+				}
 
-                        available_dates.forEach(function (d) {
-                            let row = frm.add_child('slot_booking');
-                            row.slot_booking_date = d.date;
-                            row.batch_capacity = data.batch_capacity;
-                            row.availabe_capacity = parseInt(d.capacity_available) || 0;
-                            row.__sct_available = d.capacity_available;
-                            if (parseInt(d.capacity_available) === 0) {
-                                row.reason = '';
-                            }
-                        });
+				// Calculate total capacity from date range × daily capacity
+				let total_capacity = calculate_total_capacity(
+					data.batch_start_date,
+					data.batch_end_date,
+					data.batch_capacity,
+				);
+				frm.set_value("total_batch_capacity", total_capacity);
+				calculate_totals(frm);
+				fetch_sct_remaining(frm);
 
-                        frm.refresh_field('slot_booking');
-                        calculate_totals(frm);
-                        loadSlotOpeningCalendar(frm);
-                    }
-                });
-            }
-        );
-    },
+				// ── Auto-fill slot_booking child table from SCT ──
+				// Fetches all dates from the SCT for this Slot Master
+				// and adds one row per date with available capacity pre-filled
+				frappe.call({
+					method: "custom_batch_planning.custom_batch_planning.doctype.slot_opening.slot_opening.get_sct_details",
+					args: { slot_master: frm.doc.slot_master },
+					callback: function (r) {
+						if (!r.message || !r.message.length) return;
 
-    validate: function (frm) {
-        let total_planned = parseInt(frm.doc.total_batches_planned) || 0;
-        let capacity = parseInt(frm.doc.total_batch_capacity) || 0;
-        if (capacity > 0 && total_planned > capacity) {
-            frappe.throw(`⚠️ Total Batches Planned (${total_planned}) exceeds Total Batch Capacity (${capacity})!`);
-        }
-    }
+						let available_dates = r.message.sort((a, b) => (a.date > b.date ? 1 : -1));
+						if (!available_dates.length) return;
+
+						// Clear existing rows and re-populate
+						frm.doc.slot_booking = [];
+						frm.refresh_field("slot_booking");
+
+						available_dates.forEach(function (d) {
+							if ((parseInt(d.capacity_available) || 0) <= 0) return;
+							let row = frm.add_child("slot_booking");
+							row.slot_booking_date = d.date;
+							row.batch_capacity = data.batch_capacity;
+							row.availabe_capacity = parseInt(d.capacity_available) || 0;
+							row.__sct_available = d.capacity_available; // runtime cache for validation
+							if (parseInt(d.capacity_available) === 0) {
+								row.reason = ""; // clear reason for full dates
+							}
+						});
+
+						frm.refresh_field("slot_booking");
+						calculate_totals(frm);
+						// Note: calendar is NOT re-called here — already called above
+						// after project_name resolved to avoid double render
+					},
+				});
+			},
+		);
+	},
+
+	// ── Form validate (client-side) ──
+	// Prevents saving if planned batches exceed total capacity
+	validate: function (frm) {
+		let total_planned = parseInt(frm.doc.total_batches_planned) || 0;
+		let capacity = parseInt(frm.doc.total_batch_capacity) || 0;
+		if (capacity > 0 && total_planned > capacity) {
+			frappe.throw(
+				`⚠️ Total Batches Planned (${total_planned}) exceeds Total Batch Capacity (${capacity})!`,
+			);
+		}
+	},
 });
 
-// ─────────────────────────────────────────────
-// Child Table — Slot Booking CT
-// ─────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────────────────────
+// SECTION 2 — Child Table Events: Slot Booking CT
+// ─────────────────────────────────────────────────────────────────────────────
 
-frappe.ui.form.on('Slot Booking CT', {
+frappe.ui.form.on("Slot Booking CT", {
+	// ── Slot Booking Date selected ──
+	// Validates: not in past, within batch range, no duplicates, SCT has capacity
+	slot_booking_date: function (frm, cdt, cdn) {
+		let row = locals[cdt][cdn];
+		if (!row.slot_booking_date) return;
 
-    slot_booking_date: function (frm, cdt, cdn) {
-        let row = locals[cdt][cdn];
-        if (!row.slot_booking_date) return;
+		// Cannot be before today
+		if (row.slot_booking_date < frappe.datetime.nowdate()) {
+			frappe.model.set_value(cdt, cdn, "slot_booking_date", "");
+			frappe.msgprint("⚠️ Slot Booking Date cannot be before today!");
+			return;
+		}
 
-        if (row.slot_booking_date < frappe.datetime.nowdate()) {
-            frappe.model.set_value(cdt, cdn, 'slot_booking_date', '');
-            frappe.msgprint('⚠️ Slot Booking Date cannot be before today!');
-            return;
-        }
+		// Must be within Slot Master batch window
+		let start = frm.doc.__batch_start_date || frm.doc.batch_start_date;
+		let end = frm.doc.__batch_end_date || frm.doc.batch_end_date;
 
-        let start = frm.doc.__batch_start_date || frm.doc.batch_start_date;
-        let end = frm.doc.__batch_end_date || frm.doc.batch_end_date;
+		if (start && row.slot_booking_date < start) {
+			frappe.model.set_value(cdt, cdn, "slot_booking_date", "");
+			frappe.msgprint(`⚠️ Slot Booking Date cannot be before Batch Start Date: ${start}`);
+			return;
+		}
+		if (end && row.slot_booking_date > end) {
+			frappe.model.set_value(cdt, cdn, "slot_booking_date", "");
+			frappe.msgprint(`⚠️ Slot Booking Date cannot be after Batch End Date: ${end}`);
+			return;
+		}
 
-        if (start && row.slot_booking_date < start) {
-            frappe.model.set_value(cdt, cdn, 'slot_booking_date', '');
-            frappe.msgprint(`⚠️ Slot Booking Date cannot be before Batch Start Date: ${start}`);
-            return;
-        }
-        if (end && row.slot_booking_date > end) {
-            frappe.model.set_value(cdt, cdn, 'slot_booking_date', '');
-            frappe.msgprint(`⚠️ Slot Booking Date cannot be after Batch End Date: ${end}`);
-            return;
-        }
+		// No duplicate dates in child table
+		let duplicate = (frm.doc.slot_booking || []).filter(
+			(r) => r.name !== row.name && r.slot_booking_date === row.slot_booking_date,
+		);
+		if (duplicate.length > 0) {
+			frappe.model.set_value(cdt, cdn, "slot_booking_date", "");
+			frappe.msgprint(`⚠️ Date ${row.slot_booking_date} already exists in another row!`);
+			return;
+		}
 
-        let duplicate = (frm.doc.slot_booking || []).filter(
-            r => r.name !== row.name && r.slot_booking_date === row.slot_booking_date
-        );
-        if (duplicate.length > 0) {
-            frappe.model.set_value(cdt, cdn, 'slot_booking_date', '');
-            frappe.msgprint(`⚠️ Date ${row.slot_booking_date} already exists in another row!`);
-            return;
-        }
+		if (!frm.doc.slot_master) return;
 
-        if (!frm.doc.slot_master) return;
+		// Check live SCT capacity for this specific date
+		frappe.call({
+			method: "custom_batch_planning.custom_batch_planning.doctype.slot_opening.slot_opening.get_sct_details",
+			args: { slot_master: frm.doc.slot_master, date: row.slot_booking_date },
+			callback: function (r) {
+				if (!r.message || r.message.length === 0) {
+					frappe.msgprint(
+						`⚠️ Date <b>${row.slot_booking_date}</b> not found in Slot Capacity Tracker!`,
+					);
+					frappe.model.set_value(cdt, cdn, "slot_booking_date", "");
+					return;
+				}
 
-        frappe.call({
-            method: 'custom_batch_planning.custom_batch_planning.doctype.slot_opening.slot_opening.get_sct_details',
-            args: { slot_master: frm.doc.slot_master, date: row.slot_booking_date },
-            callback: function (r) {
-                if (!r.message || r.message.length === 0) {
-                    frappe.msgprint(`⚠️ Date <b>${row.slot_booking_date}</b> not found in Slot Capacity Tracker!`);
-                    frappe.model.set_value(cdt, cdn, 'slot_booking_date', '');
-                    return;
-                }
+				let detail = r.message[0];
+				let available = parseInt(detail.capacity_available) || 0;
 
-                let detail = r.message[0];
-                let available = parseInt(detail.capacity_available) || 0;
-
-                if (available <= 0) {
-                    frappe.msgprint({
-                        title: '⚠️ No Capacity Available',
-                        message: `Date <b>${row.slot_booking_date}</b> has <b>0</b> capacity available.<br>
-                                  Total: ${detail.total_capacity} | 
-                                  Booked: ${detail.capacity_booked} | 
+				if (available <= 0) {
+					frappe.msgprint({
+						title: "⚠️ No Capacity Available",
+						message: `Date <b>${row.slot_booking_date}</b> has <b>0</b> capacity available.<br>
+                                  Total: ${detail.total_capacity} |
+                                  Booked: ${detail.capacity_booked} |
                                   Available: ${detail.capacity_available}`,
-                        indicator: 'red'
-                    });
-                    frappe.model.set_value(cdt, cdn, 'slot_booking_date', '');
-                    return;
-                }
+						indicator: "red",
+					});
+					frappe.model.set_value(cdt, cdn, "slot_booking_date", "");
+					return;
+				}
 
-                row.__sct_available = available;
-                row.availabe_capacity = available;
-                row.__sct_detail_name = detail.name;
-                frm.refresh_field('slot_booking');
+				// Cache SCT available count on the row for later validation
+				row.__sct_available = available;
+				row.availabe_capacity = available;
+				row.__sct_detail_name = detail.name;
+				frm.refresh_field("slot_booking");
 
-                frappe.msgprint({
-                    title: '✅ Capacity Available',
-                    message: `Date <b>${row.slot_booking_date}</b>: <b>${available}</b> slot(s) available.`,
-                    indicator: 'green'
-                });
-            }
-        });
-    },
+				frappe.msgprint({
+					title: "✅ Capacity Available",
+					message: `Date <b>${row.slot_booking_date}</b>: <b>${available}</b> slot(s) available.`,
+					indicator: "green",
+				});
+			},
+		});
+	},
 
-    how_many_slots_per_day: function (frm, cdt, cdn) {
-        calculate_total(frm, cdt, cdn);
-    },
+	// Recalculate booked_slots when how_many_slots_per_day changes
+	how_many_slots_per_day: function (frm, cdt, cdn) {
+		calculate_total(frm, cdt, cdn);
+	},
 
-    total_slots: function (frm, cdt, cdn) {
-        calculate_total(frm, cdt, cdn);
-    },
+	// Recalculate booked_slots when total_slots changes
+	total_slots: function (frm, cdt, cdn) {
+		calculate_total(frm, cdt, cdn);
+	},
 
-    slot_booking_remove: function (frm) {
-        calculate_totals(frm);
-        fetch_sct_remaining(frm);
-    }
+	// Recalculate grand totals when a row is removed
+	slot_booking_remove: function (frm) {
+		calculate_totals(frm);
+		fetch_sct_remaining(frm);
+	},
 });
 
-// ─────────────────────────────────────────────
-// Helper Functions
-// ─────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────────────────────
+// SECTION 3 — Helper Functions
+// ─────────────────────────────────────────────────────────────────────────────
 
+/**
+ * Calculate total batch capacity from date range and daily capacity.
+ * total = number_of_days × batch_capacity_per_day
+ */
 function calculate_total_capacity(start_date, end_date, batch_capacity) {
-    if (!start_date || !end_date || !batch_capacity) return 0;
-    let start = frappe.datetime.str_to_obj(start_date);
-    let end = frappe.datetime.str_to_obj(end_date);
-    let num_days = Math.floor((end - start) / (1000 * 60 * 60 * 24)) + 1;
-    return num_days * parseInt(batch_capacity);
+	if (!start_date || !end_date || !batch_capacity) return 0;
+	let start = frappe.datetime.str_to_obj(start_date);
+	let end = frappe.datetime.str_to_obj(end_date);
+	let num_days = Math.floor((end - start) / (1000 * 60 * 60 * 24)) + 1;
+	return num_days * parseInt(batch_capacity);
 }
 
+/**
+ * Set the Slot Master link field filter.
+ * Only shows Slot Masters that are:
+ *   - Submitted (docstatus = 1)
+ *   - Workflow state = Approved
+ *   - Not yet expired (batch_end_date >= today)
+ *   - Matching selected employee_function (if set)
+ */
 function set_slot_master_filter(frm) {
-    frm.set_query('slot_master', function () {
-        let filters = {
-            'docstatus': 1,
-            'workflow_state': 'Approved',
-            'batch_end_date': ['>=', frappe.datetime.nowdate()]
-        };
-        if (frm.doc.employee_function) {
-            filters['employee_function'] = frm.doc.employee_function;
-        }
-        return { filters: filters };
-    });
+	frm.set_query("slot_master", function () {
+		let filters = {
+			docstatus: 1,
+			workflow_state: "Approved",
+			batch_end_date: [">=", frappe.datetime.nowdate()],
+		};
+		if (frm.doc.employee_function) {
+			filters["employee_function"] = frm.doc.employee_function;
+		}
+		return { filters: filters };
+	});
 }
 
+/**
+ * Recalculate booked_slots for a single child row.
+ * booked_slots = how_many_slots_per_day × total_slots
+ * Enforces SCT per-date capacity and total batch capacity limits.
+ */
 function calculate_total(frm, cdt, cdn) {
-    let row = locals[cdt][cdn];
-    let new_booked = (parseInt(row.how_many_slots_per_day) || 0) * (parseInt(row.total_slots) || 0);
+	let row = locals[cdt][cdn];
+	let new_booked =
+		(parseInt(row.how_many_slots_per_day) || 0) * (parseInt(row.total_slots) || 0);
 
-    let other_batches = (frm.doc.slot_booking || []).reduce(function (sum, r) {
-        if (r.name === row.name) return sum;
-        return sum + (parseInt(r.booked_slots) || 0);
-    }, 0);
+	// Sum booked slots from all OTHER rows (excluding current)
+	let other_batches = (frm.doc.slot_booking || []).reduce(function (sum, r) {
+		if (r.name === row.name) return sum;
+		return sum + (parseInt(r.booked_slots) || 0);
+	}, 0);
 
-    let capacity = parseInt(frm.doc.total_batch_capacity) || 0;
+	let capacity = parseInt(frm.doc.total_batch_capacity) || 0;
 
-    if (row.__sct_available !== undefined) {
-        if (new_booked > row.__sct_available) {
-            frappe.msgprint({
-                title: '⚠️ SCT Capacity Exceeded',
-                message: `Only <b>${row.__sct_available}</b> slot(s) available for this date in SCT.<br>
+	// Check against SCT available slots for this specific date
+	if (row.__sct_available !== undefined) {
+		if (new_booked > row.__sct_available) {
+			frappe.msgprint({
+				title: "⚠️ SCT Capacity Exceeded",
+				message: `Only <b>${row.__sct_available}</b> slot(s) available for this date in SCT.<br>
                           You are trying to book <b>${new_booked}</b>.`,
-                indicator: 'orange'
-            });
-            frappe.model.set_value(cdt, cdn, 'how_many_slots_per_day', 0);
-            frappe.model.set_value(cdt, cdn, 'total_slots', 0);
-            frappe.model.set_value(cdt, cdn, 'booked_slots', 0);
-            calculate_totals(frm);
-            return;
-        }
-    }
+				indicator: "orange",
+			});
+			frappe.model.set_value(cdt, cdn, "how_many_slots_per_day", 0);
+			frappe.model.set_value(cdt, cdn, "total_slots", 0);
+			frappe.model.set_value(cdt, cdn, "booked_slots", 0);
+			calculate_totals(frm);
+			return;
+		}
+	}
 
-    if (capacity > 0 && (other_batches + new_booked) > capacity) {
-        frappe.msgprint(`⚠️ Total Batch Capacity exceeded! Max: ${capacity}, Already planned: ${other_batches}`);
-        frappe.model.set_value(cdt, cdn, 'how_many_slots_per_day', 0);
-        frappe.model.set_value(cdt, cdn, 'total_slots', 0);
-        frappe.model.set_value(cdt, cdn, 'booked_slots', 0);
-        calculate_totals(frm);
-        return;
-    }
+	// Check against overall batch capacity
+	if (capacity > 0 && other_batches + new_booked > capacity) {
+		frappe.msgprint(
+			`⚠️ Total Batch Capacity exceeded! Max: ${capacity}, Already planned: ${other_batches}`,
+		);
+		frappe.model.set_value(cdt, cdn, "how_many_slots_per_day", 0);
+		frappe.model.set_value(cdt, cdn, "total_slots", 0);
+		frappe.model.set_value(cdt, cdn, "booked_slots", 0);
+		calculate_totals(frm);
+		return;
+	}
 
-    frappe.model.set_value(cdt, cdn, 'booked_slots', new_booked);
-    calculate_totals(frm);
+	// All checks passed — set booked_slots
+	frappe.model.set_value(cdt, cdn, "booked_slots", new_booked);
+	calculate_totals(frm);
 }
 
+/**
+ * Recalculate form-level totals from all child rows.
+ * Updates: total_slots_planned, total_batches_planned, total_batch_remained
+ */
 function calculate_totals(frm) {
-    let total_slots = 0, total_batches = 0;
-    (frm.doc.slot_booking || []).forEach(function (row) {
-        total_slots += parseInt(row.how_many_slots_per_day) || 0;
-        total_batches += parseInt(row.booked_slots) || 0;
-    });
-    frm.set_value('total_slots_planned', total_slots);
-    frm.set_value('total_batches_planned', total_batches);
-    fetch_sct_remaining(frm);
+	let total_slots = 0,
+		total_batches = 0;
+	(frm.doc.slot_booking || []).forEach(function (row) {
+		total_slots += parseInt(row.how_many_slots_per_day) || 0;
+		total_batches += parseInt(row.booked_slots) || 0;
+	});
+	frm.set_value("total_slots_planned", total_slots);
+	frm.set_value("total_batches_planned", total_batches);
+	fetch_sct_remaining(frm);
 }
 
+/**
+ * Fetch remaining capacity from SCT and update total_batch_remained field.
+ * For new docs: subtracts the currently planned batches (unsaved) from DB available.
+ * For saved docs: shows DB available as-is (already deducted on save).
+ */
 function fetch_sct_remaining(frm) {
-    if (!frm.doc.slot_master) return;
-    frappe.call({
-        method: 'custom_batch_planning.custom_batch_planning.doctype.slot_opening.slot_opening.get_sct_details',
-        args: { slot_master: frm.doc.slot_master },
-        callback: function (r) {
-            if (!r.message) return;
-            let db_total_available = r.message.reduce(
-                (sum, d) => sum + (parseInt(d.capacity_available) || 0), 0
-            );
+	if (!frm.doc.slot_master) return;
+	frappe.call({
+		method: "custom_batch_planning.custom_batch_planning.doctype.slot_opening.slot_opening.get_sct_details",
+		args: { slot_master: frm.doc.slot_master },
+		callback: function (r) {
+			if (!r.message) return;
 
-            let remained = db_total_available;
-            if (frm.is_new()) {
-                let current_planned = parseInt(frm.doc.total_batches_planned) || 0;
-                remained = db_total_available - current_planned;
-            }
+			let db_total_available = r.message.reduce(
+				(sum, d) => sum + (parseInt(d.capacity_available) || 0),
+				0,
+			);
 
-            frm.set_value('total_batch_remained', remained);
-        }
-    });
+			let remained = db_total_available;
+			if (frm.is_new()) {
+				// For new unsaved docs, subtract what the user has planned so far
+				let current_planned = parseInt(frm.doc.total_batches_planned) || 0;
+				remained = db_total_available - current_planned;
+			}
+
+			frm.set_value("total_batch_remained", remained);
+		},
+	});
 }
 
-// ─────────────────────────────────────────────
-// Calendar — Slot Capacity Tracker based
-// ─────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────────────────────
+// SECTION 4 — Calendar
+// ─────────────────────────────────────────────────────────────────────────────
 
+/**
+ * Entry point for the Slot Availability Calendar.
+ * Called on: refresh, employee_function change, slot_master change
+ *
+ * Flow:
+ *   1. Guard checks: needs employee_function + custom_project
+ *   2. Injects styles (once per page load)
+ *   3. Shows loading spinner
+ *   4. Fetches SCT parent records filtered by employee_function + project
+ *   5. Fetches all Slot Capacity Detail child rows in one bulk call
+ *   6. Aggregates by date → passes to _renderCalendar()
+ */
 function loadSlotOpeningCalendar(frm) {
-    if (!frm.fields_dict.calenders) return;
+	if (!frm.fields_dict.calenders) return;
 
-    if (!frm.doc.employee_function) {
-        frm.fields_dict.calenders.$wrapper.html(`
-            <div style="padding:40px 20px; background:#f8fafc; border-radius:12px; text-align:center; border: 2px dashed #cbd5e1; margin: 20px 0;">
-                <div style="font-size: 48px; margin-bottom: 16px; opacity: 0.8;">📅</div>
-                <h4 style="color:#0f172a; margin:0 0 8px 0; font-size: 18px; font-weight: 700;">Calendar Unavailable</h4>
-                <p style="color:#64748b; margin:0; font-size: 14px;">Please select an <strong>Employee Function</strong> above to view the slot availability calendar.</p>
+	const wrapper = frm.fields_dict.calenders.$wrapper;
+
+	// Guard: Employee Function not selected yet
+	if (!frm.doc.employee_function) {
+		wrapper.html(`
+            <div class="so-cal-empty">
+                <div class="so-cal-empty-icon">📅</div>
+                <div class="so-cal-empty-title">Calendar Unavailable</div>
+                <div class="so-cal-empty-sub">
+                    Select an <strong>Employee Function</strong> to view the slot calendar.
+                </div>
             </div>
         `);
-        return;
-    }
+		_injectCalendarBaseStyles();
+		return;
+	}
 
-    const fullCalendarCSS = "https://cdn.jsdelivr.net/npm/fullcalendar@6.1.9/index.global.min.css";
-    const fullCalendarJS = "https://cdn.jsdelivr.net/npm/fullcalendar@6.1.9/index.global.min.js";
+	// Guard: Project not linked yet (set by Slot Master selection)
+	if (!frm.doc.custom_project) {
+		wrapper.html(`
+            <div class="so-cal-empty">
+                <div class="so-cal-empty-icon">📋</div>
+                <div class="so-cal-empty-title">No Project Linked</div>
+                <div class="so-cal-empty-sub">
+                    Select a <strong>Slot Master</strong> to load the project and calendar.
+                </div>
+            </div>
+        `);
+		_injectCalendarBaseStyles();
+		return;
+	}
 
-    frm.fields_dict.calenders.$wrapper.html(`
-        <div style="padding:16px; background:#f8fafc; border-radius:12px;">
-            <div style="background:white; padding:24px; border-radius:12px; box-shadow:0 10px 25px -5px rgba(0,0,0,0.05), 0 8px 10px -6px rgba(0,0,0,0.01); border: 1px solid #e2e8f0;">
-                <div style="margin-bottom:20px; display:flex; flex-wrap:wrap; justify-content:space-between; align-items:center; gap:12px;">
-                    <h3 style="margin:0; color:#0f172a; font-size:clamp(16px,2vw,20px); font-weight: 700; display:flex; align-items:center; gap:8px;">
-                        <span style="font-size:24px;">📅</span> Slot Availability Calendar
-                    </h3>
-                    <div style="display:flex; flex-wrap:wrap; gap:16px; font-size:13px; font-weight:600; padding: 8px 16px; background: #f1f5f9; border-radius: 50px;">
-                        <span style="display:flex; align-items:center;"><span style="display:inline-block;width:10px;height:10px;background:#10b981;border-radius:50%;margin-right:6px;box-shadow:0 2px 4px rgba(16,185,129,0.3);"></span>Available</span>
-                        <span style="display:flex; align-items:center;"><span style="display:inline-block;width:10px;height:10px;background:#f59e0b;border-radius:50%;margin-right:6px;box-shadow:0 2px 4px rgba(245,158,11,0.3);"></span>Partial</span>
-                        <span style="display:flex; align-items:center;"><span style="display:inline-block;width:10px;height:10px;background:#ef4444;border-radius:50%;margin-right:6px;box-shadow:0 2px 4px rgba(239,68,68,0.3);"></span>Full</span>
-                    </div>
-                </div>
-                <div id="so-calendar-wrapper" style="min-height:500px; overflow:hidden;"></div>
-                <div style="margin-top:20px; padding:12px 16px; background:#f0f9ff; border-radius:8px; border-left:4px solid #0ea5e9; display:flex; align-items:center; gap:8px;">
-                    <span style="font-size:16px;">💡</span>
-                    <small style="color:#0369a1; font-weight:500; font-size:13px;"><strong>Pro Tip:</strong> Click any date on the calendar to view a detailed breakdown of slots.</small>
-                </div>
+	// Inject styles (idempotent — only adds once)
+	_injectCalendarBaseStyles();
+
+	// Show loading spinner while data fetches
+	wrapper.html(`
+        <div class="so-cal-shell">
+            <div class="so-cal-loading">
+                <div class="so-cal-spinner"></div>
+                <span>Loading slot calendar…</span>
             </div>
         </div>
     `);
 
-    if (!document.querySelector(`link[href="${fullCalendarCSS}"]`)) {
-        let link = document.createElement("link");
-        link.rel = "stylesheet";
-        link.href = fullCalendarCSS;
-        document.head.appendChild(link);
-    }
+	frappe.call({
+		method: "custom_batch_planning.custom_batch_planning.doctype.slot_opening.slot_opening.get_calendar_data",
+		args: {
+			employee_function: frm.doc.employee_function,
+			project: frm.doc.custom_project,
+		},
+		callback: function (r) {
+			const rows = r.message || [];
 
-    if (typeof FullCalendar === "undefined") {
-        let script = document.createElement("script");
-        script.src = fullCalendarJS;
-        script.onload = () => setTimeout(() => initSCTCalendar(frm), 100);
-        document.head.appendChild(script);
-    } else {
-        setTimeout(() => initSCTCalendar(frm), 100);
-    }
-}
-
-function initSCTCalendar(frm) {
-    const wrapper = document.getElementById("so-calendar-wrapper");
-    if (!wrapper) return;
-
-    addSCTCalendarStyles();
-
-    // Fetch SCT records filtered by employee_function if set
-    let sct_filters = { 'docstatus': ['!=', 2] };
-    if (frm.doc.employee_function) {
-        sct_filters['employee_function'] = frm.doc.employee_function;
-    }
-    if (frm.doc.custom_project) {
-        sct_filters['project'] = frm.doc.custom_project;
-    }
-
-    frappe.call({
-        method: 'frappe.client.get_list',
-        args: {
-            doctype: 'Slot Capacity Tracker',
-            filters: sct_filters,
-            fields: ['name', 'employee_function', 'employee_headname', 'slot_master'],
-            limit_page_length: 999
-        },
-        callback: function (r) {
-            if (!r.message || !r.message.length) {
-                wrapper.innerHTML = '<p style="text-align:center; color:#888; padding:40px;">No Slot Capacity Tracker records found.</p>';
-                return;
-            }
-
-            let promises = r.message.map(sct => {
-                return new Promise(resolve => {
-                    frappe.call({
-                        method: 'frappe.client.get',
-                        args: { doctype: 'Slot Capacity Tracker', name: sct.name },
-                        callback: function (res) { resolve(res.message); }
-                    });
-                });
-            });
-
-            Promise.all(promises).then(docs => {
-                let slotsByDate = {};
-
-                docs.forEach(doc => {
-                    if (!doc || !doc.slot_capacity_detail) return;
-                    doc.slot_capacity_detail.forEach(row => {
-                        let date = row.date;
-                        let total = parseInt(row.total_capacity) || 0;
-                        let booked = parseInt(row.capacity_booked) || 0;
-                        let available = parseInt(row.capacity_available) || 0;
-
-                        if (!slotsByDate[date]) {
-                            slotsByDate[date] = { total: 0, booked: 0, available: 0, sources: [] };
-                        }
-                        slotsByDate[date].total += total;
-                        slotsByDate[date].booked += booked;
-                        slotsByDate[date].available += available;
-                        slotsByDate[date].sources.push({
-                            sct_name: doc.name,
-                            slot_master: doc.slot_master,
-                            employee_function: doc.employee_function,
-                            employee_headname: doc.employee_headname,
-                            total, booked, available
-                        });
-                    });
-                });
-
-                renderSCTCalendar(slotsByDate, wrapper);
-            });
-        }
-    });
-}
-
-function renderSCTCalendar(slotsByDate, wrapper) {
-    wrapper.innerHTML = '<div id="so-calendar"></div>';
-    const calEl = document.getElementById("so-calendar");
-
-    const calendar = new FullCalendar.Calendar(calEl, {
-        initialView: 'dayGridMonth',
-        headerToolbar: {
-            left: 'prev,next today',
-            center: 'title',
-            right: 'dayGridMonth'
-        },
-        height: 'auto',
-        expandRows: true,
-        selectable: false,
-        dayMaxEvents: false,
-        fixedWeekCount: false,
-        showNonCurrentDates: true,
-        events: [],
-
-        dateClick: function (info) {
-            const dateStr = info.dateStr;
-            const dayData = slotsByDate[dateStr];
-
-            if (!dayData) {
-                frappe.msgprint({
-                    title: 'No Slots Configured',
-                    message: `No slots configured for <strong>${dateStr}</strong>.`,
-                    indicator: 'orange'
-                });
-                return;
-            }
-
-            const [y, m, d] = dateStr.split('-');
-            const displayDate = `${d}-${m}-${y}`;
-
-            // Build per-source rows
-            let sourceRows = dayData.sources.map(s => `
-                <tr>
-                    <td>${s.slot_master || '-'}</td>
-                    <td>${s.employee_function || '-'}</td>
-                    <td>${s.employee_headname || '-'}</td>
-                    <td style="text-align:center;">${s.total}</td>
-                    <td style="text-align:center; color:#dc3545; font-weight:bold;">${s.booked}</td>
-                    <td style="text-align:center; color:${s.available > 0 ? '#28a745' : '#dc3545'}; font-weight:bold;">${s.available}</td>
-                </tr>
-            `).join('');
-
-            frappe.msgprint({
-                title: `📅 Slot Details — ${displayDate}`,
-                message: `
-                    <div style="margin-bottom:12px; padding:10px; background:#f8f9fa; border-radius:6px; display:flex; flex-wrap:wrap; gap:16px;">
-                        <span><strong>Total:</strong> ${dayData.total}</span>
-                        <span><strong style="color:#dc3545;">Booked:</strong> ${dayData.booked}</span>
-                        <span><strong style="color:#28a745;">Available:</strong> ${dayData.available}</span>
+			if (!rows.length) {
+				wrapper.html(`
+                <div class="so-cal-empty">
+                    <div class="so-cal-empty-icon">🔍</div>
+                    <div class="so-cal-empty-title">No SCT Records Found</div>
+                    <div class="so-cal-empty-sub">
+                        No Slot Capacity Tracker found for<br>
+                        <strong>${frm.doc.employee_function}</strong> &nbsp;→&nbsp;
+                        <strong>${frm.doc.custom_project_name || frm.doc.custom_project}</strong>
                     </div>
+                </div>
+            `);
+				return;
+			}
+
+			// Aggregate by date — same logic as before
+			const byDate = {};
+			rows.forEach(function (row) {
+				const d = String(row.date).split(" ")[0];
+				if (!byDate[d]) {
+					byDate[d] = { total: 0, booked: 0, available: 0, sources: [] };
+				}
+				byDate[d].total += parseInt(row.total_capacity) || 0;
+				byDate[d].booked += parseInt(row.capacity_booked) || 0;
+				byDate[d].available += parseInt(row.capacity_available) || 0;
+				byDate[d].sources.push({
+					sct_name: row.sct_name,
+					slot_master: row.slot_master || "-",
+					employee_headname: row.employee_headname || "-",
+					project_name: row.project_name || "-",
+					total: parseInt(row.total_capacity) || 0,
+					booked: parseInt(row.capacity_booked) || 0,
+					available: parseInt(row.capacity_available) || 0,
+				});
+			});
+
+			_renderCalendar(frm, wrapper, byDate);
+		},
+	});
+}
+
+/**
+ * Builds the calendar shell HTML and loads FullCalendar JS/CSS.
+ * Mounts the calendar only after all assets are ready.
+ *
+ * @param {Object} frm      - Frappe form object
+ * @param {Object} wrapper  - jQuery wrapper for the HTML field
+ * @param {Object} byDate   - Aggregated slot data keyed by YYYY-MM-DD
+ */
+function _renderCalendar(frm, wrapper, byDate) {
+	const FC_CSS = "https://cdn.jsdelivr.net/npm/fullcalendar@6.1.9/index.global.min.css";
+	const FC_JS = "https://cdn.jsdelivr.net/npm/fullcalendar@6.1.9/index.global.min.js";
+
+	const projectLabel = frm.doc.custom_project_name || frm.doc.custom_project || "";
+
+	// Render the shell — calendar mounts into #so-fc-mount
+	wrapper.html(`
+        <div class="so-cal-shell">
+
+            <!-- Header: title + legend -->
+            <div class="so-cal-header">
+                <div class="so-cal-header-left">
+                    <span class="so-cal-icon">📅</span>
+                    <div>
+                        <div class="so-cal-title">Slot Availability Calendar</div>
+                        <div class="so-cal-subtitle">
+                            ${frm.doc.employee_function} &nbsp;·&nbsp; ${projectLabel}
+                        </div>
+                    </div>
+                </div>
+                <div class="so-cal-legend">
+                    <span><span class="so-cal-dot" style="background:#22c55e;"></span>Available</span>
+                    <span><span class="so-cal-dot" style="background:#f59e0b;"></span>Partial</span>
+                    <span><span class="so-cal-dot" style="background:#ef4444;"></span>Full</span>
+                    <span><span class="so-cal-dot" style="background:#cbd5e1;"></span>No Slot</span>
+                </div>
+            </div>
+
+            <!-- FullCalendar mounts here -->
+            <div class="so-cal-body">
+                <div id="so-fc-mount"></div>
+            </div>
+
+            <!-- Footer tip -->
+            <div class="so-cal-footer">
+                💡 <strong>Tip:</strong> Click any highlighted date to see a detailed breakdown.
+            </div>
+
+        </div>
+    `);
+
+	const _init = () => _mountFC(byDate);
+
+	// Load CSS (unchanged)
+	if (!document.querySelector(`link[href="${FC_CSS}"]`)) {
+		const link = document.createElement("link");
+		link.rel = "stylesheet";
+		link.href = FC_CSS;
+		document.head.appendChild(link);
+	}
+
+	// NEW: poll until #so-fc-mount exists in DOM
+	function _waitAndInit(retriesLeft) {
+		if (typeof FullCalendar !== "undefined" && document.getElementById("so-fc-mount")) {
+			setTimeout(_init, 50);
+		} else if (retriesLeft > 0) {
+			setTimeout(() => _waitAndInit(retriesLeft - 1), 120);
+		}
+	}
+
+	if (typeof FullCalendar === "undefined") {
+		const script = document.createElement("script");
+		script.src = FC_JS;
+		script.onload = () => _waitAndInit(10);
+		document.head.appendChild(script);
+	} else {
+		_waitAndInit(10); // already loaded, just wait for DOM
+	}
+}
+
+/**
+ * Instantiates and renders the FullCalendar instance.
+ * Handles: cell colour-coding, pill badges, date-click popup.
+ *
+ * @param {Object} byDate - Aggregated slot data keyed by YYYY-MM-DD
+ */
+function _mountFC(byDate) {
+	const el = document.getElementById("so-fc-mount");
+	if (!el) return;
+
+	// Destroy previous instance to prevent double-mount on refresh/save
+	if (window.__soCalInstance) {
+		try {
+			window.__soCalInstance.destroy();
+		} catch (e) { }
+		window.__soCalInstance = null;
+	}
+
+	const allDates = Object.keys(byDate).sort();
+	const initialDate = allDates.length ? allDates[0] : frappe.datetime.nowdate();
+
+	const calendar = new FullCalendar.Calendar(el, {
+		initialView: "dayGridMonth",
+		initialDate: initialDate,
+		headerToolbar: {
+			left: "prev,next today",
+			center: "title",
+			right: "",
+		},
+		height: "auto",
+		fixedWeekCount: false,
+		showNonCurrentDates: true,
+		dayMaxEvents: false,
+
+		// ── Colour-code each day cell after it mounts in the DOM ──
+		dayCellDidMount: function (info) {
+			const dateStr = _toDateStr(info.date);
+			const data = byDate[dateStr];
+			const frame = info.el.querySelector(".fc-daygrid-day-frame");
+
+			// No data for this date — leave cell plain
+			if (!frame || !data) return;
+
+			// Build the pill badge
+			const pill = document.createElement("div");
+			pill.className = "so-cal-pill";
+
+			if (data.available === 0) {
+				// Fully booked
+				pill.classList.add("so-cal-pill--full");
+				pill.innerHTML = '<span class="so-pill-label">FULL</span>';
+				info.el.classList.add("so-day--full");
+			} else if (data.booked > 0) {
+				// Partially booked
+				pill.classList.add("so-cal-pill--partial");
+				pill.innerHTML = `
+                    <span class="so-pill-num">${data.available}</span>
+                    <span class="so-pill-sep">/</span>
+                    <span class="so-pill-den">${data.total}</span>
+                    <span class="so-pill-unit">left</span>
+                `;
+				info.el.classList.add("so-day--partial");
+			} else {
+				// Fully available
+				pill.classList.add("so-cal-pill--avail");
+				pill.innerHTML = `
+                    <span class="so-pill-num">${data.available}</span>
+                    <span class="so-pill-sep">/</span>
+                    <span class="so-pill-den">${data.total}</span>
+                    <span class="so-pill-unit">free</span>
+                `;
+				info.el.classList.add("so-day--avail");
+			}
+
+			frame.appendChild(pill);
+			info.el.style.cursor = "pointer";
+		},
+
+		// ── Date click: show detailed breakdown popup ──
+		dateClick: function (info) {
+			const dateStr = _toDateStr(info.date);
+			const data = byDate[dateStr];
+
+			// Date has no slot data
+			if (!data) {
+				frappe.msgprint({
+					title: `📅 ${_humanDate(dateStr)}`,
+					message:
+						'<p style="text-align:center;color:#64748b;padding:16px 0;">No slot configured for this date.</p>',
+					indicator: "gray",
+				});
+				return;
+			}
+
+			// Determine status badge colour + label
+			const statusColor =
+				data.available === 0 ? "#ef4444" : data.booked > 0 ? "#f59e0b" : "#22c55e";
+			const statusLabel =
+				data.available === 0 ? "FULL" : data.booked > 0 ? "PARTIAL" : "AVAILABLE";
+
+			// Build per-SCT source rows for the breakdown table
+			const rows = data.sources
+				.map(
+					(s) => `
+                <tr>
+                    <td style="font-size:12px;">${s.slot_master}</td>
+                    <td style="font-size:12px;">${s.employee_headname}</td>
+                    <td style="text-align:center;font-weight:700;">${s.total}</td>
+                    <td style="text-align:center;font-weight:700;color:#ef4444;">${s.booked}</td>
+                    <td style="text-align:center;font-weight:700;
+                        color:${s.available > 0 ? "#22c55e" : "#ef4444"};">${s.available}</td>
+                </tr>
+            `,
+				)
+				.join("");
+
+			frappe.msgprint({
+				title: `📅 ${_humanDate(dateStr)}`,
+				message: `
+                    <!-- Summary bar -->
+                    <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:14px;">
+                        <span style="background:${statusColor};color:#fff;font-size:11px;
+                            font-weight:800;padding:3px 12px;border-radius:20px;letter-spacing:1px;">
+                            ${statusLabel}
+                        </span>
+                        <span style="font-size:14px;color:#334155;">
+                            <strong>${data.total}</strong> total &nbsp;·&nbsp;
+                            <strong style="color:#ef4444;">${data.booked}</strong> booked &nbsp;·&nbsp;
+                            <strong style="color:#22c55e;">${data.available}</strong> available
+                        </span>
+                    </div>
+                    <!-- Per-SCT breakdown table -->
                     <div style="overflow-x:auto;">
-                        <table class="table table-bordered" style="width:100%; font-size:13px;">
-                            <thead style="background:#f0f0f0;">
+                        <table class="table table-bordered" style="width:100%;font-size:13px;margin:0;">
+                            <thead style="background:#f1f5f9;">
                                 <tr>
                                     <th>Slot Master</th>
-                                    <th>Employee Function</th>
                                     <th>Head Name</th>
-                                    <th>Total</th>
-                                    <th>Booked</th>
-                                    <th>Available</th>
+                                    <th style="text-align:center;">Total</th>
+                                    <th style="text-align:center;">Booked</th>
+                                    <th style="text-align:center;">Available</th>
                                 </tr>
                             </thead>
-                            <tbody>${sourceRows}</tbody>
+                            <tbody>${rows}</tbody>
                         </table>
                     </div>
                 `,
-                wide: true,
-                indicator: dayData.available === 0 ? 'red' : dayData.available < dayData.total ? 'orange' : 'green'
-            });
-        },
+				wide: true,
+				indicator: data.available === 0 ? "red" : data.booked > 0 ? "orange" : "green",
+			});
+		},
+	});
 
-        dayCellDidMount: function (info) {
-            const year = info.date.getFullYear();
-            const month = String(info.date.getMonth() + 1).padStart(2, '0');
-            const day = String(info.date.getDate()).padStart(2, '0');
-            const dateStr = `${year}-${month}-${day}`;
-            const dayData = slotsByDate[dateStr];
+	calendar.render();
+	window.__soCalInstance = calendar; // ← store reference for next destroy
 
-            if (!dayData || dayData.total === 0) return;
+	// Use IntersectionObserver to updateSize when calendar tab becomes visible
+	if (window.__soCalObserver) window.__soCalObserver.disconnect();
+	window.__soCalObserver = new IntersectionObserver((entries) => {
+		if (entries[0].isIntersecting) {
+			setTimeout(() => calendar.updateSize(), 50);
+		}
+	});
+	window.__soCalObserver.observe(el);
 
-            info.el.style.cursor = dayData.available > 0 ? 'pointer' : 'default';
-
-            const indicator = document.createElement('div');
-            indicator.className = 'sct-slot-indicator';
-
-            if (dayData.available === 0) {
-                indicator.innerHTML = `<strong>FULL</strong>`;
-                indicator.style.cssText = `
-                    font-size:11px; font-weight:700; margin-top:8px;
-                    padding:4px 8px; border-radius:20px; text-align:center;
-                    background:linear-gradient(135deg, #ef4444, #dc2626); color:white; letter-spacing:0.5px;
-                    box-shadow: 0 2px 4px rgba(239, 68, 68, 0.25); border: 1px solid #b91c1c;
-                `;
-                info.el.classList.add('sct-fully-booked');
-            } else if (dayData.booked > 0) {
-                indicator.innerHTML = `${dayData.available}/${dayData.total} left`;
-                indicator.style.cssText = `
-                    font-size:11px; font-weight:700; margin-top:8px;
-                    padding:4px 8px; border-radius:20px; text-align:center;
-                    background:linear-gradient(135deg, #f59e0b, #d97706); color:white;
-                    box-shadow: 0 2px 4px rgba(245, 158, 11, 0.25); border: 1px solid #b45309;
-                `;
-                info.el.classList.add('sct-partial');
-            } else {
-                indicator.innerHTML = `${dayData.available}/${dayData.total} free`;
-                indicator.style.cssText = `
-                    font-size:11px; font-weight:700; margin-top:8px;
-                    padding:4px 8px; border-radius:20px; text-align:center;
-                    background:linear-gradient(135deg, #10b981, #059669); color:white;
-                    box-shadow: 0 2px 4px rgba(16, 185, 129, 0.25); border: 1px solid #047857;
-                `;
-                info.el.classList.add('sct-available');
-            }
-
-            const frame = info.el.querySelector('.fc-daygrid-day-frame');
-            if (frame) frame.appendChild(indicator);
-        }
-    });
-
-    calendar.render();
-    setTimeout(() => { calendar.updateSize(); }, 300);
-
-    // Responsive resize
-    window.addEventListener('resize', () => { calendar.updateSize(); });
+	if (window.__soCalResize) window.removeEventListener("resize", window.__soCalResize);
+	window.__soCalResize = () => calendar.updateSize();
+	window.addEventListener("resize", window.__soCalResize);
+	setTimeout(() => calendar.updateSize(), 800);
 }
 
-function addSCTCalendarStyles() {
-    const old = document.getElementById('sct-calendar-styles');
-    if (old) old.remove();
+// ─────────────────────────────────────────────────────────────────────────────
+// SECTION 5 — Calendar Utility Helpers
+// ─────────────────────────────────────────────────────────────────────────────
 
-    const style = document.createElement('style');
-    style.id = 'sct-calendar-styles';
-    style.textContent = `
-        #so-calendar-wrapper {
-            display:block !important; position:relative !important;
-            min-height:500px !important; overflow:hidden !important;
-        }
-        #so-calendar {
-            display:block !important;
-            font-family: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif !important;
-            font-size:14px !important; color:#334155 !important;
-        }
-        #so-calendar table {
-            border-collapse:separate !important; border-spacing:0 !important;
-            width:100% !important; table-layout:fixed !important;
-            border-radius: 10px !important; overflow: hidden !important;
-        }
-        #so-calendar td, #so-calendar th {
-            padding:0 !important; border:1px solid #e2e8f0 !important; vertical-align:top !important;
-        }
-        #so-calendar .fc-col-header-cell {
-            padding:14px 8px !important; font-weight:700 !important;
-            text-align:center !important; background:#f8fafc !important; font-size:13px !important;
-            color: #64748b !important; text-transform: uppercase !important; letter-spacing: 0.5px !important;
-        }
-        #so-calendar .fc-daygrid-day {
-            min-height:110px !important; position:relative !important; overflow:visible !important;
-            transition:all 0.2s ease !important;
-        }
-        #so-calendar .fc-daygrid-day:hover { 
-            background:#f1f5f9 !important; 
-            z-index: 10 !important;
-        }
-        #so-calendar .fc-daygrid-day-frame {
-            height:100% !important; min-height:110px !important; padding:8px !important;
-            display:flex !important; flex-direction:column !important;
-        }
-        #so-calendar .fc-daygrid-day-top {
-            text-align:right !important; margin-bottom:8px !important;
-        }
-        #so-calendar .fc-daygrid-day-number {
-            padding:6px 10px !important; font-size:14px !important; font-weight:600 !important;
-            color: #475569 !important; text-decoration: none !important;
-            border-radius: 50% !important; transition: all 0.2s ease !important; display: inline-block !important;
-        }
-        #so-calendar .fc-daygrid-day-number:hover {
-            background: #cbd5e1 !important; color: #0f172a !important;
-        }
-        #so-calendar .sct-fully-booked  { background:#fef2f2 !important; }
-        #so-calendar .sct-partial       { background:#fffbeb !important; }
-        #so-calendar .sct-available     { background:#f0fdf4 !important; }
-        #so-calendar .fc-day-past       { background:#f8fafc !important; opacity:0.6 !important; }
-        #so-calendar .fc-day-today      { background:#eff6ff !important; box-shadow: inset 0 0 0 2px #3b82f6 !important; }
-        #so-calendar .fc-day-today .fc-daygrid-day-number {
-            background: #3b82f6 !important; color: white !important; box-shadow: 0 2px 4px rgba(59, 130, 246, 0.3) !important;
-        }
-        #so-calendar .fc-day-today .fc-daygrid-day-number:hover {
-            background: #2563eb !important; color: white !important;
-        }
-        #so-calendar .fc-toolbar {
-            margin-bottom:24px !important; display:flex !important;
-            justify-content:space-between !important; align-items:center !important;
-            flex-wrap:wrap !important; gap:16px !important;
-        }
-        #so-calendar .fc-toolbar-title {
-            font-size:clamp(18px,2.5vw,24px) !important; font-weight:800 !important; color:#0f172a !important;
-            letter-spacing: -0.5px !important;
-        }
-        #so-calendar .fc-toolbar-chunk { display:flex !important; gap:8px !important; align-items:center !important; }
-        
-        /* Modern Button Styling */
-        #so-calendar {
-            --fc-button-bg-color: #ffffff;
-            --fc-button-border-color: #cbd5e1;
-            --fc-button-hover-bg-color: #f8fafc;
-            --fc-button-hover-border-color: #94a3b8;
-            --fc-button-active-bg-color: #3b82f6;
-            --fc-button-active-border-color: #2563eb;
-            --fc-button-text-color: #475569;
-        }
-        #so-calendar .fc-button-group {
-            display: flex !important;
-            gap: 6px !important;
-            box-shadow: none !important;
-        }
-        #so-calendar .fc .fc-button-primary, #so-calendar .fc .fc-button {
-            background:#ffffff !important; border:1px solid #cbd5e1 !important;
-            color:#475569 !important; padding:8px 18px !important; border-radius:8px !important;
-            cursor:pointer !important; font-size:14px !important; font-weight: 600 !important;
-            transition:all 0.2s cubic-bezier(0.4, 0, 0.2, 1) !important;
-            box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.05) !important;
-            text-transform: capitalize !important;
-            outline: none !important;
-        }
-        #so-calendar .fc .fc-button-primary:hover, #so-calendar .fc .fc-button:hover { 
-            background:#f8fafc !important; border-color:#94a3b8 !important; 
-            color: #0f172a !important; transform: translateY(-1px) !important;
-            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06) !important;
-            z-index: 5 !important;
-        }
-        #so-calendar .fc .fc-button-primary:active, #so-calendar .fc .fc-button:active {
-            transform: translateY(0) !important;
-            box-shadow: inset 0 2px 4px 0 rgba(0, 0, 0, 0.05) !important;
-        }
-        #so-calendar .fc .fc-button-primary:not(:disabled).fc-button-active,
-        #so-calendar .fc .fc-button-primary:not(:disabled):active { 
-            background:linear-gradient(135deg, #3b82f6, #2563eb) !important; border-color:#1d4ed8 !important; color: white !important;
-            box-shadow: 0 4px 6px -1px rgba(59, 130, 246, 0.4) !important;
-        }
-        #so-calendar .fc .fc-button-primary:disabled {
-            opacity: 0.5 !important;
-            cursor: not-allowed !important;
-            background: #f1f5f9 !important;
-            border-color: #e2e8f0 !important;
-            box-shadow: none !important;
-            transform: none !important;
-        }
-        
-        #so-calendar .fc-view-harness        { position:relative !important; border-radius: 10px !important; overflow: hidden !important; box-shadow: 0 4px 15px -3px rgba(0, 0, 0, 0.05) !important; }
-        #so-calendar .fc-scrollgrid         { border:1px solid #e2e8f0 !important; border-radius: 10px !important; }
+/**
+ * Convert a JS Date object to YYYY-MM-DD string (local time, not UTC).
+ * FullCalendar's dayCellDidMount gives local Date objects.
+ */
+function _toDateStr(date) {
+	const y = date.getFullYear();
+	const m = String(date.getMonth() + 1).padStart(2, "0");
+	const d = String(date.getDate()).padStart(2, "0");
+	return `${y}-${m}-${d}`;
+}
 
-        @media (max-width: 640px) {
-            #so-calendar .fc-toolbar        { flex-direction:column !important; align-items:stretch !important; gap: 16px !important; }
-            #so-calendar .fc-toolbar-chunk  { justify-content: center !important; }
-            #so-calendar .fc-toolbar-title  { font-size:20px !important; text-align: center !important; }
-            #so-calendar .fc-button         { padding:8px 12px !important; font-size:13px !important; flex: 1 !important; }
-            #so-calendar .fc-daygrid-day    { min-height:90px !important; }
-            #so-calendar .sct-slot-indicator { font-size:10px !important; padding:4px 6px !important; }
-            #so-calendar .fc-col-header-cell { font-size:11px !important; padding:8px 4px !important; }
-        }
+/**
+ * Format YYYY-MM-DD to human-readable "DD Mon YYYY" for popup titles.
+ */
+function _humanDate(dateStr) {
+	const [y, m, d] = dateStr.split("-");
+	const mon = [
+		"Jan",
+		"Feb",
+		"Mar",
+		"Apr",
+		"May",
+		"Jun",
+		"Jul",
+		"Aug",
+		"Sep",
+		"Oct",
+		"Nov",
+		"Dec",
+	];
+	return `${d} ${mon[parseInt(m) - 1]} ${y}`;
+}
+
+/**
+ * _injectCalendarBaseStyles()
+ *
+ * ⚠️  PASTE YOUR EXISTING _injectCalendarBaseStyles() FUNCTION HERE.
+ *
+ * It covers:
+ *   - .so-cal-shell, .so-cal-header, .so-cal-body, .so-cal-footer
+ *   - .so-cal-loading, .so-cal-spinner, @keyframes so-spin
+ *   - .so-cal-empty states
+ *   - FullCalendar overrides (#so-fc-mount)
+ *   - Day state tints: .so-day--avail, .so-day--partial, .so-day--full
+ *   - Pill badges: .so-cal-pill, .so-cal-pill--avail/partial/full
+ *   - FC button overrides
+ *   - Responsive breakpoints: 768px, 560px, 380px
+ */
+// ↓ PASTE _injectCalendarBaseStyles() HERE ↓
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Styles (injected once into <head>)
+// ─────────────────────────────────────────────────────────────────────────────
+
+function _injectCalendarBaseStyles() {
+	if (document.getElementById("so-cal-styles")) return;
+	const s = document.createElement("style");
+	s.id = "so-cal-styles";
+	s.textContent = `
+
+    /* Shell */
+    .so-cal-shell {
+        background: #fff;
+        border: 1px solid #e2e8f0;
+        border-radius: 16px;
+        overflow: hidden;
+        box-shadow: 0 8px 32px -8px rgba(15,23,42,0.10);
+        font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+        margin: 8px 0 20px;
+    }
+
+    /* Header */
+    .so-cal-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        flex-wrap: wrap;
+        gap: 12px;
+        padding: 18px 24px;
+        background: linear-gradient(135deg, #0f172a 0%, #1e40af 100%);
+    }
+    .so-cal-header-left {
+        display: flex;
+        align-items: center;
+        gap: 14px;
+    }
+    .so-cal-icon {
+        font-size: 34px;
+        line-height: 1;
+        filter: drop-shadow(0 2px 6px rgba(0,0,0,0.35));
+    }
+    .so-cal-title {
+        font-size: 17px;
+        font-weight: 700;
+        color: #fff;
+        letter-spacing: -0.3px;
+    }
+    .so-cal-subtitle {
+        font-size: 12px;
+        color: #93c5fd;
+        margin-top: 3px;
+        max-width: 380px;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+    .so-cal-legend {
+        display: flex;
+        align-items: center;
+        gap: 14px;
+        font-size: 12px;
+        font-weight: 600;
+        color: #cbd5e1;
+        flex-wrap: wrap;
+    }
+    .so-cal-dot {
+        display: inline-block;
+        width: 9px; height: 9px;
+        border-radius: 50%;
+        margin-right: 4px;
+        vertical-align: middle;
+    }
+
+    .so-cal-body {
+    padding: 16px 16px 10px;
+    background: #f8fafc;
+    overflow-x: auto;          /* ← horizontal scroll */
+    -webkit-overflow-scrolling: touch;
+}
+
+    /* Footer */
+    .so-cal-footer {
+        padding: 10px 24px;
+        font-size: 12px;
+        color: #64748b;
+        background: #f1f5f9;
+        border-top: 1px solid #e2e8f0;
+    }
+
+    /* Loading */
+    .so-cal-loading {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 12px;
+        padding: 70px 20px;
+        color: #64748b;
+        font-size: 14px;
+        font-weight: 500;
+    }
+    .so-cal-spinner {
+        width: 22px; height: 22px;
+        border: 3px solid #e2e8f0;
+        border-top-color: #3b82f6;
+        border-radius: 50%;
+        animation: so-spin 0.75s linear infinite;
+        flex-shrink: 0;
+    }
+    @keyframes so-spin { to { transform: rotate(360deg); } }
+
+    /* Empty state */
+    .so-cal-empty {
+        text-align: center;
+        padding: 50px 24px;
+        background: #f8fafc;
+        border: 2px dashed #cbd5e1;
+        border-radius: 16px;
+        margin: 12px 0 20px;
+    }
+    .so-cal-empty-icon  { font-size: 46px; margin-bottom: 12px; }
+    .so-cal-empty-title { font-size: 16px; font-weight: 700; color: #0f172a; margin-bottom: 6px; }
+    .so-cal-empty-sub   { font-size: 13px; color: #64748b; line-height: 1.7; }
+
+    /* FullCalendar overrides */
+   #so-fc-mount {
+    font-family: 'Segoe UI', system-ui, -apple-system, sans-serif !important;
+    min-width: 560px;
+}
+    #so-fc-mount .fc-toolbar {
+        flex-wrap: wrap !important;
+        gap: 10px !important;
+        margin-bottom: 16px !important;
+    }
+    #so-fc-mount .fc-button-group {
+        gap: 8px !important;
+        display: flex !important;
+    }
+    #so-fc-mount .fc-button-group > .fc-button {
+        border-radius: 8px !important;
+        margin: 0 !important;
+    }
+    #so-fc-mount .fc-toolbar-chunk {
+        display: flex !important;
+        align-items: center !important;
+        gap: 8px !important;
+    }
+    #so-fc-mount .fc-toolbar-title {
+        font-size: clamp(16px, 2.5vw, 22px) !important;
+        font-weight: 800 !important;
+        color: #0f172a !important;
+        letter-spacing: -0.5px;
+    }
+    #so-fc-mount .fc-col-header-cell {
+        background: #f1f5f9 !important;
+        padding: 10px 4px !important;
+        font-size: 11px !important;
+        font-weight: 700 !important;
+        text-transform: uppercase;
+        letter-spacing: 0.8px;
+        color: #475569 !important;
+    }
+    #so-fc-mount .fc-daygrid-day {
+    min-height: 72px !important;
+    transition: background 0.15s ease;
+}
+    #so-fc-mount .fc-daygrid-day:hover { background: #f1f5f9 !important; }
+    #so-fc-mount .fc-daygrid-day-frame {
+    padding: 4px 5px 6px !important;
+    min-height: 72px !important;   /* was 95px */
+    display: flex !important;
+    flex-direction: column !important;
+    position: relative !important;
+}
+    #so-fc-mount .fc-daygrid-day-top { margin-bottom: 6px !important; }
+    #so-fc-mount .fc-daygrid-day-number {
+        font-size: 13px !important;
+        font-weight: 600 !important;
+        color: #475569 !important;
+        padding: 4px 8px !important;
+        border-radius: 50% !important;
+        text-decoration: none !important;
+        transition: background 0.15s, color 0.15s;
+    }
+    #so-fc-mount .fc-day-today {
+        background: #eff6ff !important;
+        box-shadow: inset 0 0 0 2px #3b82f6 !important;
+    }
+    #so-fc-mount .fc-day-today .fc-daygrid-day-number {
+        background: #3b82f6 !important;
+        color: #fff !important;
+    }
+
+    /* Day state tints */
+    #so-fc-mount .so-day--avail   { background: #f0fdf4 !important; }
+    #so-fc-mount .so-day--partial { background: #fffbeb !important; }
+    #so-fc-mount .so-day--full    { background: #fef2f2 !important; }
+
+    /* Pill */
+    .so-cal-pill {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 2px;
+        border-radius: 8px;
+        padding: 4px 7px;
+        margin-top: auto;
+        white-space: nowrap;
+        user-select: none;
+    }
+    .so-cal-pill--avail {
+        background: linear-gradient(135deg, #22c55e, #15803d);
+        box-shadow: 0 2px 6px rgba(34,197,94,0.28);
+        color: #fff;
+    }
+    .so-cal-pill--partial {
+        background: linear-gradient(135deg, #f59e0b, #b45309);
+        box-shadow: 0 2px 6px rgba(245,158,11,0.28);
+        color: #fff;
+    }
+    .so-cal-pill--full {
+        background: linear-gradient(135deg, #ef4444, #b91c1c);
+        box-shadow: 0 2px 6px rgba(239,68,68,0.28);
+        color: #fff;
+    }
+    .so-pill-num   { font-size: 13px; font-weight: 800; line-height: 1; }
+    .so-pill-sep   { font-size: 11px; opacity: 0.65; }
+    .so-pill-den   { font-size: 11px; opacity: 0.85; font-weight: 700; }
+    .so-pill-unit  { font-size: 9px; opacity: 0.8; margin-left: 2px; font-weight: 600; letter-spacing: 0.3px; }
+    .so-pill-label { font-size: 10px; font-weight: 800; letter-spacing: 1px; }
+
+    /* FC buttons */
+    #so-fc-mount .fc-button-primary {
+        background: #fff !important;
+        border: 1.5px solid #cbd5e1 !important;
+        color: #475569 !important;
+        border-radius: 8px !important;
+        font-weight: 600 !important;
+        font-size: 13px !important;
+        padding: 6px 16px !important;
+        box-shadow: 0 1px 3px rgba(0,0,0,0.06) !important;
+        transition: all 0.15s ease !important;
+    }
+    #so-fc-mount .fc-button-primary:hover {
+        background: #f8fafc !important;
+        border-color: #94a3b8 !important;
+        color: #0f172a !important;
+        transform: translateY(-1px) !important;
+        box-shadow: 0 4px 10px rgba(0,0,0,0.08) !important;
+    }
+    #so-fc-mount .fc-button-primary:not(:disabled).fc-button-active,
+    #so-fc-mount .fc-button-primary:not(:disabled):active {
+        background: linear-gradient(135deg, #3b82f6, #1d4ed8) !important;
+        border-color: #1d4ed8 !important;
+        color: #fff !important;
+        box-shadow: 0 4px 10px rgba(59,130,246,0.35) !important;
+        transform: none !important;
+    }
+    #so-fc-mount .fc-scrollgrid { border-color: #e2e8f0 !important; border-radius: 10px !important; }
+    #so-fc-mount td, #so-fc-mount th { border-color: #e2e8f0 !important; }
+    #so-fc-mount .fc-view-harness { border-radius: 10px; overflow: hidden; }
+
+    /* ── Responsive ── */
+    @media (max-width: 768px) {
+        .so-cal-header  { padding: 14px 16px; }
+        .so-cal-legend  { gap: 10px; font-size: 11px; }
+        .so-cal-body    { padding: 14px 10px 10px; }
+    }
+    @media (max-width: 560px) {
+        .so-cal-legend  { display: none; }
+        .so-cal-subtitle { max-width: 220px; }
+        #so-fc-mount .fc-toolbar { flex-direction: column !important; align-items: stretch !important; }
+
+       #so-fc-mount .fc-daygrid-day {
+    min-height: 72px !important;   /* was 95px */
+    transition: background 0.15s ease;
+}
+        #so-fc-mount .fc-daygrid-day-frame { min-height: 72px !important; padding: 4px 3px !important; }
+        .so-cal-pill    { padding: 3px 4px; border-radius: 5px; }
+        .so-pill-num    { font-size: 11px; }
+        .so-pill-unit   { display: none; }
+        #so-fc-mount .fc-col-header-cell { font-size: 9px !important; padding: 6px 2px !important; }
+        #so-fc-mount .fc-daygrid-day-number { font-size: 11px !important; padding: 2px 5px !important; }
+        #so-fc-mount .fc-button-primary { padding: 5px 10px !important; font-size: 12px !important; margin: 0 !important; }
+        /* Fix arrow button spacing in FC toolbar */
+
+     #so-fc-mount .fc-toolbar-title { font-size: 18px !important; }
+    }
+    @media (max-width: 380px) {
+        .so-cal-title  { font-size: 14px; }
+        .so-cal-icon   { font-size: 26px; }
+        .so-pill-sep, .so-pill-den { display: none; }
+        .so-cal-pill   { padding: 3px 5px; }
+    }
     `;
-    document.head.appendChild(style);
+	document.head.appendChild(s);
 }

@@ -8,6 +8,8 @@
   "section_break_06dv",
   "employee_function",
   "function_head_name",
+  "project_id",
+  "project_name",
   "allocation_status",
   "mr_created",
   "amended_from",
@@ -33,6 +35,19 @@
    "fieldname": "function_head_name",
    "fieldtype": "Data",
    "label": "Function Head Name"
+  },
+  {
+   "fieldname": "project_id",
+   "fieldtype": "Link",
+   "label": "Project ID",
+   "options": "Project",
+   "read_only": 1
+  },
+  {
+   "fieldname": "project_name",
+   "fieldtype": "Data",
+   "label": "Project Name",
+   "read_only": 1
   },
   {
    "allow_on_submit": 1,

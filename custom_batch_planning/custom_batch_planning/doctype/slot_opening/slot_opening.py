@@ -6,9 +6,12 @@ from frappe.model.document import Document
 from frappe.model.naming import make_autoname
 
 
+# ═══════════════════════════════════════════════
+# PART 1 — API: SCT Details & Calendar Data
+# ═══════════════════════════════════════════════
+
 @frappe.whitelist()
 def get_sct_details(slot_master=None, date=None):
-
     if not slot_master:
         return []
 
@@ -40,10 +43,50 @@ def get_sct_details(slot_master=None, date=None):
     )
 
 
+@frappe.whitelist()
+def get_calendar_data(employee_function=None, project=None):
+    if not employee_function or not project:
+        return []
+
+    # Single query joining SCT parent + child in one DB hit
+    return frappe.db.sql(
+        """
+        SELECT
+            sct.name AS sct_name,
+            sct.slot_master,
+            sct.employee_headname,
+            sct.project_name,
+            scd.date,
+            scd.total_capacity,
+            scd.capacity_booked,
+            scd.capacity_available
+        FROM
+            `tabSlot Capacity Tracker` sct
+        JOIN
+            `tabSlot Capacity Detail` scd
+            ON scd.parent = sct.name
+        WHERE
+            sct.employee_function = %(employee_function)s
+            AND sct.project = %(project)s
+            AND sct.docstatus != 2
+        ORDER BY
+            scd.date ASC
+        """,
+        {
+            "employee_function": employee_function,
+            "project": project
+        },
+        as_dict=True
+    )
+
+
+# ═══════════════════════════════════════════════
+# PART 2 — Slot Opening Controller
+# ═══════════════════════════════════════════════
+
 class SlotOpening(Document):
 
     def autoname(self):
-
         if not self.batch_start_date and self.slot_master:
             self.batch_start_date = frappe.db.get_value(
                 "Slot Master List",
@@ -58,6 +101,8 @@ class SlotOpening(Document):
         self.name = make_autoname(f"SO-{yy[2:]}-{mm}-.###")
 
     def before_save(self):
+        if self.slot_master and not self.employee_function:
+            frappe.throw("Please select an Employee Function first before selecting a Slot Master.")
 
         self._validate_slot_dates()
         self._check_duplicate_full_capacity()
@@ -66,17 +111,18 @@ class SlotOpening(Document):
             self._update_sct()
 
     def _validate_slot_dates(self):
-
         if not self.slot_master:
             return
 
         sm = frappe.get_doc("Slot Master List", self.slot_master)
-        start_date, end_date = str(sm.batch_start_date), str(sm.batch_end_date)
+        start_date = str(sm.batch_start_date)
+        end_date = str(sm.batch_end_date)
 
         for row in self.slot_booking:
-
             if not row.slot_booking_date:
-                frappe.throw(f"Row {row.idx}: Slot Booking Date is mandatory!")
+                frappe.throw(
+                    f"Row {row.idx}: Slot Booking Date is mandatory!"
+                )
 
             booking_date = str(row.slot_booking_date)
 
@@ -95,8 +141,10 @@ class SlotOpening(Document):
                 )
 
     def _check_duplicate_full_capacity(self):
-
-        current_dates = [row.slot_booking_date for row in self.slot_booking]
+        current_dates = [
+            row.slot_booking_date
+            for row in self.slot_booking
+        ]
 
         existing_list = frappe.db.get_all(
             "Slot Opening",
@@ -110,9 +158,7 @@ class SlotOpening(Document):
         )
 
         for date in current_dates:
-
             for existing in existing_list:
-
                 existing_dates = frappe.db.exists(
                     "Slot Booking CT",
                     {
@@ -121,8 +167,10 @@ class SlotOpening(Document):
                     }
                 )
 
-                if existing_dates and existing.total_batch_remained == 0:
-
+                if (
+                    existing_dates
+                    and existing.total_batch_remained == 0
+                ):
                     frappe.throw(
                         f"A Slot Opening <b>{existing.name}</b> already exists "
                         f"for <b>{self.function_head_name}</b> on "
@@ -130,7 +178,6 @@ class SlotOpening(Document):
                     )
 
     def _update_sct(self):
-
         if not self.slot_master:
             return
 
@@ -143,10 +190,12 @@ class SlotOpening(Document):
         if not sct_name:
             return
 
-        sct_doc = frappe.get_doc("Slot Capacity Tracker", sct_name)
+        sct_doc = frappe.get_doc(
+            "Slot Capacity Tracker",
+            sct_name
+        )
 
         for row in self.slot_booking:
-
             if not row.slot_booking_date or not row.booked_slots:
                 continue
 
@@ -154,7 +203,8 @@ class SlotOpening(Document):
 
             sct_detail = next(
                 (
-                    d for d in sct_doc.slot_capacity_detail
+                    d
+                    for d in sct_doc.slot_capacity_detail
                     if str(d.date) == str(row.slot_booking_date)
                 ),
                 None
@@ -162,10 +212,13 @@ class SlotOpening(Document):
 
             if not sct_detail:
                 frappe.throw(
-                    f"Date {row.slot_booking_date} not found in SCT ({sct_name})."
+                    f"Date {row.slot_booking_date} "
+                    f"not found in SCT ({sct_name})."
                 )
 
-            available = int(sct_detail.capacity_available or 0)
+            available = int(
+                sct_detail.capacity_available or 0
+            )
 
             if booked > available:
                 frappe.throw(
@@ -173,9 +226,10 @@ class SlotOpening(Document):
                     f"{available} slot(s) available."
                 )
 
-            sct_detail.capacity_booked = int(
-                sct_detail.capacity_booked or 0
-            ) + booked
+            sct_detail.capacity_booked = (
+                int(sct_detail.capacity_booked or 0)
+                + booked
+            )
 
             sct_detail.capacity_available = (
                 int(sct_detail.total_capacity or 0)
@@ -187,7 +241,8 @@ class SlotOpening(Document):
         sct_doc.save()
 
         frappe.msgprint(
-            f"Slot Capacity Tracker <b>{sct_name}</b> updated successfully.",
+            f"Slot Capacity Tracker <b>{sct_name}</b> "
+            f"updated successfully.",
             title="✅ SCT Updated",
             indicator="green"
         )
@@ -199,7 +254,6 @@ class SlotOpening(Document):
         self._reverse_sct()
 
     def on_trash(self):
-
         if frappe.db.exists(
             "Batch Creation",
             {"slot_opening": self.name}
@@ -212,7 +266,6 @@ class SlotOpening(Document):
         self._reverse_sct()
 
     def _reverse_sct(self):
-
         if not self.slot_master:
             return
 
@@ -225,10 +278,12 @@ class SlotOpening(Document):
         if not sct_name:
             return
 
-        sct_doc = frappe.get_doc("Slot Capacity Tracker", sct_name)
+        sct_doc = frappe.get_doc(
+            "Slot Capacity Tracker",
+            sct_name
+        )
 
         for row in self.slot_booking:
-
             if not row.slot_booking_date or not row.booked_slots:
                 continue
 
@@ -236,24 +291,25 @@ class SlotOpening(Document):
 
             sct_detail = next(
                 (
-                    d for d in sct_doc.slot_capacity_detail
+                    d
+                    for d in sct_doc.slot_capacity_detail
                     if str(d.date) == str(row.slot_booking_date)
                 ),
                 None
             )
 
             if not sct_detail:
-
                 frappe.log_error(
-                    f"Date {row.slot_booking_date} not found in SCT ({sct_name})",
+                    f"Date {row.slot_booking_date} "
+                    f"not found in SCT ({sct_name})",
                     "Slot Opening Cancel"
                 )
-
                 continue
 
             sct_detail.capacity_booked = max(
                 0,
-                int(sct_detail.capacity_booked or 0) - booked
+                int(sct_detail.capacity_booked or 0)
+                - booked
             )
 
             sct_detail.capacity_available = (
@@ -266,7 +322,8 @@ class SlotOpening(Document):
         sct_doc.save()
 
         frappe.msgprint(
-            f"Slot Capacity Tracker <b>{sct_name}</b> reversed successfully.",
+            f"Slot Capacity Tracker <b>{sct_name}</b> "
+            f"reversed successfully.",
             title="✅ SCT Reversed",
             indicator="blue"
         )

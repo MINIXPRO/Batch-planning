@@ -11,7 +11,11 @@ frappe.ui.form.on("Batches Planned", {
 
 		// ── Show buttons only if Approved ──
 		if (frm.doc.workflow_state === "Approved") {
-			frm.add_custom_button("Run Material Planning", function () {
+			frappe.db.get_value("Slot Opening", frm.doc.slot_opening_id, "batch_end_date", function(data) {
+				let today = frappe.datetime.nowdate();
+				if (!data || !data.batch_end_date || data.batch_end_date < today) return;
+
+				frm.add_custom_button("Run Material Planning", function () {
 				run_material_planning(frm);
 			}).addClass("btn-primary");
 
@@ -109,6 +113,7 @@ frappe.ui.form.on("Batches Planned", {
 				},
 				"Create",
 			);
+			});
 		}
 	},
 });
@@ -483,7 +488,7 @@ function open_new_ma(frm) {
 	frappe.new_doc("Material Allocation", {
 		batch_planning: frm.doc.name,
 		employee_function: frm.doc.employee_function,
-		project: frm.doc.project,
+		project_id: frm.doc.project,
 		project_name: frm.doc.project_name,
 		workflow_state: "Draft",
 	});

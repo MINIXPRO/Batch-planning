@@ -6,19 +6,51 @@
  "editable_grid": 1,
  "engine": "InnoDB",
  "field_order": [
-  "section_break_yv4d"
+  "details_section",
+  "allocated_by",
+  "status",
+  "allocated_on",
+  "material_allocation_id"
  ],
  "fields": [
   {
-   "fieldname": "section_break_yv4d",
-   "fieldtype": "Section Break"
+   "fieldname": "details_section",
+   "fieldtype": "Section Break",
+   "label": "Details"
+  },
+  {
+   "fieldname": "allocated_by",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "label": "Allocated By",
+   "options": "User"
+  },
+  {
+   "fieldname": "allocated_on",
+   "fieldtype": "Datetime",
+   "in_list_view": 1,
+   "label": "Allocated On",
+   "options": "Today"
+  },
+  {
+   "fieldname": "material_allocation_id",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "label": "Material Allocation ID",
+   "options": "Material Allocation"
+  },
+  {
+   "fieldname": "status",
+   "fieldtype": "Select",
+   "label": "Status",
+   "options": "\nAllocated\nDeallocated"
   }
  ],
  "grid_page_length": 50,
  "index_web_pages_for_search": 1,
  "istable": 1,
  "links": [],
- "modified": "2026-05-13 12:28:39.977323",
+ "modified": "2026-05-15 11:56:40.252319",
  "modified_by": "Administrator",
  "module": "Custom Batch Planning",
  "name": "Allocation History",

@@ -50,6 +50,16 @@ frappe.ui.form.on('Batch Creation', {
     },
 
     slot_opening: function (frm) {
+        if (frm.doc.slot_opening && !frm.doc.custom_employee_function) {
+            frappe.msgprint({
+                title: __("Missing Employee Function"),
+                message: __("Please select an Employee Function first before selecting a Slot Opening."),
+                indicator: "orange"
+            });
+            frm.set_value("slot_opening", "");
+            return;
+        }
+
         if (!frm.doc.slot_opening) {
             frm.set_value('month', '');
             frm.clear_table('slot_opening_table');
@@ -199,11 +209,10 @@ frappe.ui.form.on('Batch Creation', {
                 freeze: true,
                 freeze_message: 'Creating Batches Planned records...',
                 callback: function (r) {
-                    console.log("Response:", r);
                     if (!r.exc) {
                         frappe.msgprint({
                             title: 'Success',
-                            message: r.message,
+                            message: 'Batches Planned created successfully.',
                             indicator: 'green'
                         });
                         frm.reload_doc();
@@ -232,29 +241,61 @@ frappe.ui.form.on('Batch Planning Detail', {
         let row = locals[cdt][cdn];
         if (!row.batch_type || !row.slot_opening_id) return;
 
-        let type_map = {
-            'Manufacturing': 'MFG',
-            'Process Development': 'PD',
-            'Machine Trial': 'MT'
-        };
-        let short_code = type_map[row.batch_type];
-        if (!short_code) return;
+        if (!frm._counter_queue) frm._counter_queue = Promise.resolve();
 
-        let count = (frm.doc.custom_batch_details || []).filter(function (r) {
-            return r.batch_type === row.batch_type && r.idx !== row.idx;
-        }).length;
+        frm._counter_queue = frm._counter_queue.then(function () {
+            return new Promise(function (resolve) {
+                // Collect already assigned IDs in current doc
+                let assigned_ids = (frm.doc.custom_batch_details || [])
+                    .filter(r => r.batch_planning_id && r.name !== row.name)
+                    .map(r => r.batch_planning_id);
 
-        let counter = String(count + 1).padStart(2, '0');
-        let id = `${row.slot_opening_id}-${short_code}-${counter}`;
-        frappe.model.set_value(cdt, cdn, 'batch_planning_id', id);
+                frappe.call({
+                    method: 'custom_batch_planning.custom_batch_planning.doctype.batch_creation.batch_creation.get_next_batch_counter',
+                    args: {
+                        slot_opening_id: row.slot_opening_id,
+                        batch_type: row.batch_type,
+                        exclude_ids: JSON.stringify(assigned_ids)
+                    },
+                    callback: function (r) {
+                        if (r.message) {
+                            frappe.model.set_value(cdt, cdn, 'batch_planning_id', r.message);
+                        }
+                        resolve();
+                    }
+                });
+            });
+        });
     },
-
     finished_item: function (frm, cdt, cdn) {
+        let row = locals[cdt][cdn];
+
+        if (row.finished_item && !row.batch_type) {
+            frappe.msgprint({
+                title: __("Missing Batch Type"),
+                message: __("Please select a Batch Type first before selecting a Finished Item."),
+                indicator: "orange"
+            });
+            frappe.model.set_value(cdt, cdn, 'finished_item', '');
+            return;
+        }
+
         frappe.model.set_value(cdt, cdn, 'bom_list', '');
     },
 
     bom_list: function (frm, cdt, cdn) {
         let row = locals[cdt][cdn];
+
+        if (row.bom_list && !row.finished_item) {
+            frappe.msgprint({
+                title: __("Missing Finished Item"),
+                message: __("Please select a Finished Item first before selecting a BOM."),
+                indicator: "orange"
+            });
+            frappe.model.set_value(cdt, cdn, 'bom_list', '');
+            return;
+        }
+
         if (!row.bom_list) return;
 
         open_bom_dialog(frm, cdt, cdn, row.bom_list, row.batch_type);

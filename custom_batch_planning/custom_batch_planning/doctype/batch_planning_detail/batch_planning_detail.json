@@ -57,7 +57,7 @@
    "fieldname": "reason",
    "fieldtype": "Select",
    "label": "Reason",
-   "options": "\nMachine Under Maintenance\nManpower Shortage\nLow Demand\nOther Issues",
+   "options": "\nN/A\nMachine Under Maintenance\nManpower Shortage\nLow Demand\nOther Issues",
    "read_only": 1
   },
   {
