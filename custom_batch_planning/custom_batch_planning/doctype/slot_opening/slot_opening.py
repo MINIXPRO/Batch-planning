@@ -37,7 +37,8 @@ def get_sct_details(slot_master=None, date=None):
             "date",
             "total_capacity",
             "capacity_booked",
-            "capacity_available"
+            "capacity_available",
+            "batches_planned"
         ],
         ignore_permissions=True
     )

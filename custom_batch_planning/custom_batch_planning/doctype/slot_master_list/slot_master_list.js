@@ -44,6 +44,9 @@ frappe.ui.form.on('Slot Master List', {
         }
         calculate_totals(frm);
     },
+    batch_capacity: function (frm) {
+        calculate_totals(frm);
+    },
 
     refresh: function (frm) {
         if (frm.doc.employee_function) {

@@ -1,6 +1,7 @@
 # Copyright (c) 2026, Shivam Singh and contributors
 # For license information, please see license.txt
 
+import json
 import frappe
 from frappe.model.document import Document
 from frappe.utils import getdate
@@ -13,11 +14,69 @@ ENABLE_AFTER_SUBMIT_LOGIC = True
 # =========================================================
 
 MONTH_MAP = {
-    "january": "01", "february": "02", "march": "03",
-    "april": "04", "may": "05", "june": "06",
-    "july": "07", "august": "08", "september": "09",
-    "october": "10", "november": "11", "december": "12",
+    "january": "01",
+    "february": "02",
+    "march": "03",
+    "april": "04",
+    "may": "05",
+    "june": "06",
+    "july": "07",
+    "august": "08",
+    "september": "09",
+    "october": "10",
+    "november": "11",
+    "december": "12",
 }
+
+
+# =========================================================
+# HELPER — SCT batches_planned increment / decrement
+# =========================================================
+
+def _update_sct_batches_planned(slot_opening_id, slot_booking_date, delta):
+    """
+    Increment or decrement batches_planned in Slot Capacity Detail.
+    delta = +1 for increment, -1 for decrement.
+    Uses direct DB set_value for performance (no heavy parent doc save).
+    """
+    if not slot_opening_id or not slot_booking_date:
+        return
+
+    slot_master = frappe.db.get_value(
+        "Slot Opening", slot_opening_id, "slot_master"
+    )
+    if not slot_master:
+        return
+
+    sct_name = frappe.db.get_value(
+        "Slot Capacity Tracker", {"slot_master": slot_master}, "name"
+    )
+    if not sct_name:
+        return
+
+    sct_detail = frappe.db.get_value(
+        "Slot Capacity Detail",
+        {
+            "parent": sct_name,
+            "parenttype": "Slot Capacity Tracker",
+            "date": slot_booking_date,
+        },
+        ["name", "batches_planned"],
+        as_dict=True,
+    )
+
+    if not sct_detail:
+        frappe.log_error(
+            message=f"Date {slot_booking_date} not found in SCT {sct_name}",
+            title="SCT batches_planned update failed",
+        )
+        return
+
+    new_planned = max(0, int(sct_detail.batches_planned or 0) + delta)
+    frappe.db.set_value(
+        "Slot Capacity Detail", sct_detail.name, "batches_planned", new_planned
+    )
+
 
 # ═══════════════════════════════════════════════
 # PART 1 — API: Get Valid Slot Openings
@@ -28,17 +87,11 @@ def get_valid_slot_openings(employee_function, current_doc=None):
     """
     Returns Slot Openings where at least one date still has
     remaining capacity (per-date check).
-
-    Logic:
-        A Slot Opening is valid if ANY of its dates satisfies:
-            COUNT(Batches Planned for that date) < booked_slots for that date
-
-    This replaces the old NOT IN (SELECT slot_opening FROM tabBatch Creation)
-    filter which incorrectly blocked a slot after a single Batch Creation.
     """
     today = frappe.utils.today()
 
-    valid = frappe.db.sql("""
+    valid = frappe.db.sql(
+        """
         SELECT DISTINCT so.name
         FROM `tabSlot Opening` so
         INNER JOIN `tabSlot Booking CT` sb ON sb.parent = so.name
@@ -56,7 +109,10 @@ def get_valid_slot_openings(employee_function, current_doc=None):
                       AND bp.slot_booking_date = sb2.slot_booking_date
                 ) < sb2.booked_slots
           )
-    """, (employee_function, today, today), as_dict=True)
+    """,
+        (employee_function, today, today),
+        as_dict=True,
+    )
 
     return [r.name for r in valid]
 
@@ -69,18 +125,8 @@ def get_valid_slot_openings(employee_function, current_doc=None):
 def get_next_batch_counter(slot_opening_id, batch_type, exclude_ids=None):
     """
     Returns the next Batch Planning ID for a given Slot Opening + Batch Type.
-
-    Logic (MAX-based, not COUNT-based):
-        1. Find MAX numeric suffix from finalized Batches Planned records.
-        2. Find MAX numeric suffix from active draft Batch Creation child rows.
-        3. next_num = max(both) + 1
-
-    This ensures:
-        - Numbering is globally continuous across multiple Batch Creations.
-        - If a record is deleted, its number is NOT reused (gap is kept).
-        - Example: MFG-01, MFG-02, MFG-03 deleted → next is MFG-04, not MFG-02.
+    MAX-based (not COUNT-based) to avoid reuse of deleted numbers.
     """
-    import json
     exclude_ids = json.loads(exclude_ids) if exclude_ids else []
 
     if not slot_opening_id or not batch_type:
@@ -93,18 +139,24 @@ def get_next_batch_counter(slot_opening_id, batch_type, exclude_ids=None):
     }
     short_code = type_map.get(batch_type, "EXP")
 
-    # MAX from finalized Batches Planned
-    max_committed = frappe.db.sql("""
+    max_committed = (
+        frappe.db.sql(
+            """
         SELECT COALESCE(MAX(
             FLOOR(CAST(SUBSTRING_INDEX(batch_planning_id, '-', -1) AS DECIMAL(10,0)))
         ), 0)
         FROM `tabBatches Planned`
         WHERE slot_opening_id = %s AND batch_type = %s
           AND batch_planning_id REGEXP '^.+-[0-9]+$'
-    """, (slot_opening_id, batch_type))[0][0] or 0
+    """,
+            (slot_opening_id, batch_type),
+        )[0][0]
+        or 0
+    )
 
-    # MAX from active drafts in Batch Creation child tables
-    max_draft = frappe.db.sql("""
+    max_draft = (
+        frappe.db.sql(
+            """
         SELECT COALESCE(MAX(
             FLOOR(CAST(SUBSTRING_INDEX(bpd.batch_planning_id, '-', -1) AS DECIMAL(10,0)))
         ), 0)
@@ -113,13 +165,19 @@ def get_next_batch_counter(slot_opening_id, batch_type, exclude_ids=None):
         WHERE bpd.slot_opening_id = %s AND bpd.batch_type = %s
           AND bc.docstatus != 2
           AND bpd.batch_planning_id REGEXP '^.+-[0-9]+$'
-    """, (slot_opening_id, batch_type))[0][0] or 0
+    """,
+            (slot_opening_id, batch_type),
+        )[0][0]
+        or 0
+    )
 
     next_num = max(int(max_committed), int(max_draft)) + 1
 
-    # Already assigned IDs in current doc (not yet saved)
     if exclude_ids:
-        while f"{slot_opening_id}-{short_code}-{str(next_num).zfill(2)}" in exclude_ids:
+        while (
+            f"{slot_opening_id}-{short_code}-{str(next_num).zfill(2)}"
+            in exclude_ids
+        ):
             next_num += 1
 
     return f"{slot_opening_id}-{short_code}-{str(next_num).zfill(2)}"
@@ -143,12 +201,16 @@ class BatchCreation(Document):
             mm = MONTH_MAP.get(self.month.strip().lower())
 
         if not mm and self.slot_opening:
-            first_date = frappe.db.sql("""
+            first_date = frappe.db.sql(
+                """
                 SELECT MIN(slot_booking_date) AS d
                 FROM `tabSlot Booking CT`
                 WHERE parent = %s
                   AND slot_booking_date >= CURDATE()
-            """, self.slot_opening, as_dict=True)
+            """,
+                self.slot_opening,
+                as_dict=True,
+            )
 
             if first_date and first_date[0].d:
                 dt = getdate(first_date[0].d)
@@ -174,10 +236,13 @@ class BatchCreation(Document):
             next_num += 1
             candidate = f"{prefix}{str(next_num).zfill(3)}"
 
-        frappe.db.sql("""
+        frappe.db.sql(
+            """
             INSERT INTO `tabSeries` (name, `current`) VALUES (%s, %s)
             ON DUPLICATE KEY UPDATE `current` = %s
-        """, (prefix, next_num, next_num))
+        """,
+            (prefix, next_num, next_num),
+        )
 
         self.name = candidate
 
@@ -193,8 +258,7 @@ class BatchCreation(Document):
             )
 
         # 2. Cross-doc duplicate Batch Planning ID check
-        #    (same batch_planning_id cannot exist in another Batch Creation's Batches Planned)
-        for row in (self.custom_batch_details or []):
+        for row in self.custom_batch_details or []:
             if row.batch_planning_id:
                 existing_bc = frappe.db.get_value(
                     "Batches Planned",
@@ -211,7 +275,7 @@ class BatchCreation(Document):
 
         # 3. Within-doc duplicate Batch Planning ID check
         seen_ids = []
-        for row in (self.custom_batch_details or []):
+        for row in self.custom_batch_details or []:
             if row.batch_planning_id:
                 if row.batch_planning_id in seen_ids:
                     frappe.throw(
@@ -221,7 +285,7 @@ class BatchCreation(Document):
                 seen_ids.append(row.batch_planning_id)
 
         # 4. Basic field order checks
-        for row in (self.custom_batch_details or []):
+        for row in self.custom_batch_details or []:
             if row.finished_item and not row.batch_type:
                 frappe.throw(
                     f"Row {row.idx}: Please select a Batch Type before selecting a Finished Item."
@@ -232,65 +296,61 @@ class BatchCreation(Document):
                 )
 
         # 5. Batch Planning ID fallback auto-generation
-        for row in (self.custom_batch_details or []):
+        for row in self.custom_batch_details or []:
             if not row.batch_planning_id and row.slot_booking_date:
                 try:
                     parsed_date = frappe.utils.getdate(row.slot_booking_date)
                     year = parsed_date.strftime("%y")
                     month = parsed_date.strftime("%m")
                     prefix = f"BC-{year}-{month}-.###"
-                    row.batch_planning_id = frappe.model.naming.make_autoname(prefix)
+                    row.batch_planning_id = frappe.model.naming.make_autoname(
+                        prefix
+                    )
                 except Exception:
                     pass
 
-        # 6. Per-date capacity check
-        #    For each row, verify that adding it will not exceed the
-        #    booked_slots for that specific date in the Slot Opening.
-        #
-        #    Formula:
-        #        already_created  = Batches Planned already saved for (slot, date)
-        #        current_doc_count = other rows in THIS doc targeting same date
-        #        total = already_created + current_doc_count + 1  (this row)
-        #        if total > date_capacity → throw
-        #
-        #    This is per-date so that a fully-booked Day 1 does not
-        #    block planning on Day 2 of the same Slot Opening.
-        if self.slot_opening:
-            for row in (self.custom_batch_details or []):
-                if not row.slot_booking_date:
-                    continue
+        # # 6. Per-date capacity check
+        # if self.slot_opening:
+        #     for row in self.custom_batch_details or []:
+        #         if not row.slot_booking_date:
+        #             continue
 
-                date_capacity = int(frappe.db.get_value(
-                    "Slot Booking CT",
-                    {
-                        "parent": self.slot_opening,
-                        "slot_booking_date": row.slot_booking_date,
-                    },
-                    "booked_slots",
-                ) or 0)
+        #         date_capacity = int(
+        #             frappe.db.get_value(
+        #                 "Slot Booking CT",
+        #                 {
+        #                     "parent": self.slot_opening,
+        #                     "slot_booking_date": row.slot_booking_date,
+        #                 },
+        #                 "booked_slots",
+        #             )
+        #             or 0
+        #         )
 
-                already_created = frappe.db.count(
-                    "Batches Planned",
-                    {
-                        "slot_opening_id": self.slot_opening,
-                        "slot_booking_date": row.slot_booking_date,
-                    },
-                )
+        #         already_created = frappe.db.count(
+        #             "Batches Planned",
+        #             {
+        #                 "slot_opening_id": self.slot_opening,
+        #                 "slot_booking_date": row.slot_booking_date,
+        #             },
+        #         )
 
-                # Other rows in the current doc targeting the same date
-                current_doc_count = len([
-                    r for r in (self.custom_batch_details or [])
-                    if r.slot_booking_date == row.slot_booking_date
-                    and r.idx != row.idx
-                ])
+        #         current_doc_count = len(
+        #             [
+        #                 r
+        #                 for r in self.custom_batch_details or []
+        #                 if r.slot_booking_date == row.slot_booking_date
+        #                 and r.idx != row.idx
+        #             ]
+        #         )
 
-                total = already_created + current_doc_count + 1
+        #         total = already_created + current_doc_count + 1
 
-                if total > date_capacity:
-                    frappe.throw(
-                        f"⚠️ Slot fully booked for <b>{row.slot_booking_date}</b>! "
-                        f"Capacity: {date_capacity} | Already Created: {already_created}"
-                    )
+        #         if total > date_capacity:
+        #             frappe.throw(
+        #                 f"⚠️ Slot fully booked for <b>{row.slot_booking_date}</b>! "
+        #                 f"Capacity: {date_capacity} | Already Created: {already_created}"
+        #             )
 
     # ─────────────────────────────────────────
     # COMMON METHOD — Create Batches Planned
@@ -299,9 +359,7 @@ class BatchCreation(Document):
     def create_batches_planned_records(self):
         count = 0
 
-        for row in (self.custom_batch_details or []):
-            # Skip if record already created for this Batch Planning ID
-            # from the same Batch Creation (re-submit guard)
+        for row in self.custom_batch_details or []:
             existing = frappe.db.get_value(
                 "Batches Planned",
                 {"batch_planning_id": row.batch_planning_id},
@@ -311,7 +369,6 @@ class BatchCreation(Document):
 
             if existing:
                 if existing.batch_creation == self.name:
-                    # Same doc — already created, skip
                     continue
                 else:
                     frappe.throw(
@@ -319,7 +376,6 @@ class BatchCreation(Document):
                         f"already exists under <b>{existing.batch_creation}</b>."
                     )
 
-            # Fetch BOM from BOM Store (post-edit override) if available
             batch_key = f"{self.name}-{row.idx}"
             bom_store = frappe.db.get_value(
                 "Batch BOM Store after Edit",
@@ -328,10 +384,9 @@ class BatchCreation(Document):
             )
 
             bp = frappe.new_doc("Batches Planned")
-            bp.batch_planning_id   = row.batch_planning_id
-            bp.slot_opening_id     = row.slot_opening_id
+            bp.batch_planning_id = row.batch_planning_id
+            bp.slot_opening_id = row.slot_opening_id
 
-            # Project: prefer Slot Opening's project, fallback to BC-level project
             if row.slot_opening_id:
                 bp.project = frappe.db.get_value(
                     "Slot Opening", row.slot_opening_id, "custom_project"
@@ -339,23 +394,27 @@ class BatchCreation(Document):
             if not bp.project:
                 bp.project = getattr(self, "custom_project", None)
 
-            bp.employee_function   = self.custom_employee_function
-            bp.employee_name       = self.custom_function_head_name
-            bp.month               = self.month
-            bp.batch_type          = row.batch_type
-            bp.finished_item       = row.finished_item
-            bp.slot_booking_date   = row.slot_booking_date
-            bp.batch_creation      = self.name
-            bp.bom_list            = bom_store if bom_store else row.bom_list
+            bp.employee_function = self.custom_employee_function
+            bp.employee_name = self.custom_function_head_name
+            bp.month = self.month
+            bp.batch_type = row.batch_type
+            bp.finished_item = row.finished_item
+            bp.slot_booking_date = row.slot_booking_date
+            bp.batch_creation = self.name
+            bp.bom_list = bom_store if bom_store else row.bom_list
 
             bp.flags.ignore_permissions = True
-            bp.flags.ignore_validate    = True
-            bp.flags.ignore_mandatory   = True
-            bp.flags.ignore_workflow    = True
+            bp.flags.ignore_validate = True
+            bp.flags.ignore_mandatory = True
+            bp.flags.ignore_workflow = True
 
             bp.insert(ignore_permissions=True, ignore_mandatory=True)
 
-            # Apply workflow state and docstatus
+            # ── SCT batches_planned increment (+1) ──
+            _update_sct_batches_planned(
+                row.slot_opening_id, row.slot_booking_date, +1
+            )
+
             update_data = {
                 "status": row.status,
                 "workflow_state": row.status,
@@ -385,11 +444,31 @@ class BatchCreation(Document):
         self.create_batches_planned_records()
 
     def on_trash(self):
-        if frappe.db.exists("Batches Planned", {"batch_creation": self.name}):
-            frappe.throw(
-                f"Cannot delete Batch Creation <b>{self.name}</b>. "
-                f"Batches Planned exist for it."
+        bp_list = frappe.get_all(
+            "Batches Planned",
+            filters={"batch_creation": self.name},
+            fields=["name", "slot_opening_id", "slot_booking_date"],
+        )
+
+        # Pehle saare SCT decrements karo
+        for bp in bp_list:
+            _update_sct_batches_planned(
+                bp.slot_opening_id, bp.slot_booking_date, -1
             )
+
+        # Flag set karo — batches_planned.py ka on_trash dobara -1 na kare
+        frappe.flags.skip_sct_decrement = True
+        try:
+            for bp in bp_list:
+                frappe.delete_doc(
+                    "Batches Planned",
+                    bp.name,
+                    ignore_permissions=True,
+                    force=True,
+                )
+        finally:
+            # Flag hamesha reset karo chahe error aaye ya na aaye
+            frappe.flags.skip_sct_decrement = False
 
 
 # ═══════════════════════════════════════════════
@@ -416,13 +495,16 @@ def create_batches_planned(doc_name):
 
 @frappe.whitelist()
 def get_item_details_for_bom(item_codes):
-    import json
     item_codes = json.loads(item_codes)
     if not item_codes:
         return []
 
-    return frappe.db.sql("""
+    return frappe.db.sql(
+        """
         SELECT name, item_group, min_order_qty, safety_stock
         FROM `tabItem`
         WHERE name IN %(items)s
-    """, {"items": item_codes}, as_dict=True)
+    """,
+        {"items": item_codes},
+        as_dict=True,
+    )

@@ -117,22 +117,38 @@ frappe.ui.form.on('Batch Creation', {
                 });
                 frm.refresh_field('slot_opening_table');
 
-                frm.clear_table('custom_batch_details');
-                future_rows.forEach(function (slot) {
-                    let total = parseInt(slot.booked_slots) || 0;
-                    for (let i = 0; i < total; i++) {
-                        let child = frm.add_child('custom_batch_details');
-                        child.slot_opening_id = frm.doc.slot_opening;
-                        child.slot_booking_date = slot.slot_booking_date;
-                        child.reason = slot.reason;
+                frappe.call({
+                    method: 'custom_batch_planning.custom_batch_planning.doctype.slot_opening.slot_opening.get_sct_details',
+                    args: { slot_master: r.message.slot_master },
+                    callback: function (sct_r) {
+                        let sct_map = {};
+                        (sct_r.message || []).forEach(function (d) {
+                            sct_map[d.date] = parseInt(d.batches_planned) || 0;
+                        });
+
+                        frm.clear_table('custom_batch_details');
+                        future_rows.forEach(function (slot) {
+                            let booked = parseInt(slot.booked_slots) || 0;
+                            let planned = sct_map[slot.slot_booking_date] || 0;
+                            let remaining = booked - planned;
+
+                            if (remaining <= 0) return;
+
+                            for (let i = 0; i < remaining; i++) {
+                                let child = frm.add_child('custom_batch_details');
+                                child.slot_opening_id = frm.doc.slot_opening;
+                                child.slot_booking_date = slot.slot_booking_date;
+                                child.reason = slot.reason;
+                            }
+                        });
+                        frm.refresh_field('custom_batch_details');
+
+                        frappe.show_alert({
+                            message: `✅ Slots loaded from ${frm.doc.slot_opening}`,
+                            indicator: 'green'
+                        }, 4);
                     }
                 });
-                frm.refresh_field('custom_batch_details');
-
-                frappe.show_alert({
-                    message: `✅ Slots loaded from ${frm.doc.slot_opening}`,
-                    indicator: 'green'
-                }, 4);
             }
         });
     },

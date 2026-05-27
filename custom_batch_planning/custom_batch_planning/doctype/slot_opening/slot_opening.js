@@ -44,15 +44,18 @@ frappe.ui.form.on("Slot Opening", {
 						.sort((a, b) => (a.date > b.date ? 1 : -1))
 						.map(
 							(d) => `
-                            <tr>
-                                <td>${d.date.split("-").reverse().join("-")}</td>
-                                <td>${d.total_capacity}</td>
-                                <td>${d.capacity_booked}</td>
-                                <td style="color:${d.capacity_available > 0 ? "green" : "red"}; font-weight:bold;">
-                                    ${d.capacity_available}
-                                </td>
-                            </tr>
-                        `,
+    <tr>
+        <td>${d.date.split("-").reverse().join("-")}</td>
+        <td>${d.total_capacity}</td>
+        <td>${d.capacity_booked}</td>
+        <td style="color:${d.capacity_available > 0 ? "green" : "red"}; font-weight:bold;">
+            ${d.capacity_available}
+        </td>
+        <td style="color:${d.batches_planned > 0 ? "#e67e22" : "#27ae60"}; font-weight:bold;">
+            ${d.batches_planned || 0}
+        </td>
+    </tr>
+`,
 						)
 						.join("");
 
@@ -63,9 +66,10 @@ frappe.ui.form.on("Slot Opening", {
                                 <thead style="background:#f0f0f0">
                                     <tr>
                                         <th>Date</th>
-                                        <th>Total</th>
+                                        <th>Total Capacity</th>
                                         <th>Booked</th>
                                         <th>Available</th>
+										<th>Batches Planned</th>
                                     </tr>
                                 </thead>
                                 <tbody>${rows}</tbody>
@@ -81,56 +85,84 @@ frappe.ui.form.on("Slot Opening", {
 		// Only shown for saved (non-new) documents
 		// Pre-fills the new Batch Creation doc with data from this Slot Opening
 		let today = frappe.datetime.nowdate();
-		if (!frm.is_new() && frm.doc.batch_end_date && frm.doc.batch_end_date >= today) {
-			frm.add_custom_button(__("➕ Create Batch"), function () {
-				if (frm.is_dirty()) {
-					frappe.msgprint(__("Please save the document before creating a Batch."));
-					return;
-				}
-
-				frappe
-					.new_doc("Batch Creation", {
-						slot_opening: frm.doc.name,
-						custom_employee_function: frm.doc.employee_function,
-						custom_project_id: frm.doc.custom_project,
-						custom_project_name: frm.doc.custom_project_name,
-						custom_function_head_name: frm.doc.function_head_name,
-						month: frm.doc.batch_start_date
-							? new Date(frm.doc.batch_start_date).toLocaleString("en-US", {
-								month: "long",
-							})
-							: "",
-						custom_total_batches_planned: frm.doc.total_batches_planned,
-					})
-					.then(() => {
-						if (!cur_frm) return;
-
-						// Auto-fill Slot Opening Table in Batch Creation
-						cur_frm.clear_table("slot_opening_table");
-						(frm.doc.slot_booking || []).forEach(function (row) {
-							let nr = cur_frm.add_child("slot_opening_table");
-							nr.slot_booking_date = row.slot_booking_date;
-							nr.how_many_slots_per_day = row.how_many_slots_per_day;
-							nr.total_slots = row.total_slots;
-							nr.booked_slots = row.booked_slots;
-							nr.availabe_capacity = row.availabe_capacity;
-							nr.reason = row.reason;
-						});
-						cur_frm.refresh_field("slot_opening_table");
-
-						// Auto-fill Batch Details — one row per booked slot per date
-						cur_frm.clear_table("custom_batch_details");
-						(frm.doc.slot_booking || []).forEach(function (row) {
-							let count = parseInt(row.booked_slots) || 0;
-							for (let i = 0; i < count; i++) {
-								let child = cur_frm.add_child("custom_batch_details");
-								child.slot_booking_date = row.slot_booking_date;
-								child.slot_opening_id = frm.doc.name;
-								child.reason = row.reason;
-							}
-						});
-						cur_frm.refresh_field("custom_batch_details");
+		if (!frm.is_new() && frm.doc.batch_end_date && frm.doc.batch_end_date >= today && frm.doc.slot_master) {
+			frappe.call({
+				method: 'custom_batch_planning.custom_batch_planning.doctype.slot_opening.slot_opening.get_sct_details',
+				args: { slot_master: frm.doc.slot_master },
+				callback: function (sct_r) {
+					let has_remaining = (sct_r.message || []).some(function (d) {
+						return parseInt(d.capacity_booked || 0) > parseInt(d.batches_planned || 0);
 					});
+
+					if (!has_remaining) return;
+
+					frm.add_custom_button(__("➕ Create Batch"), function () {
+						if (frm.is_dirty()) {
+							frappe.msgprint(__("Please save the document before creating a Batch."));
+							return;
+						}
+
+						frappe
+							.new_doc("Batch Creation", {
+								slot_opening: frm.doc.name,
+								custom_employee_function: frm.doc.employee_function,
+								custom_project_id: frm.doc.custom_project,
+								custom_project_name: frm.doc.custom_project_name,
+								custom_function_head_name: frm.doc.function_head_name,
+								month: frm.doc.batch_start_date
+									? new Date(frm.doc.batch_start_date).toLocaleString("en-US", {
+										month: "long",
+									})
+									: "",
+								custom_total_batches_planned: frm.doc.total_batches_planned,
+							})
+							.then(() => {
+								if (!cur_frm) return;
+
+								cur_frm.clear_table("slot_opening_table");
+								frappe.call({
+									method: 'custom_batch_planning.custom_batch_planning.doctype.slot_opening.slot_opening.get_sct_details',
+									args: { slot_master: frm.doc.slot_master },
+									callback: function (sct_r) {
+										let sct_map = {};
+										(sct_r.message || []).forEach(function (d) {
+											sct_map[d.date] = parseInt(d.batches_planned) || 0;
+										});
+
+										// ── slot_opening_table fill karo ──
+										(frm.doc.slot_booking || []).forEach(function (row) {
+											let nr = cur_frm.add_child("slot_opening_table");
+											nr.slot_booking_date = row.slot_booking_date;
+											nr.how_many_slots_per_day = row.how_many_slots_per_day;
+											nr.total_slots = row.total_slots;
+											nr.booked_slots = row.booked_slots;
+											nr.availabe_capacity = row.availabe_capacity;
+											nr.reason = row.reason;
+										});
+										cur_frm.refresh_field("slot_opening_table");
+
+										// ── custom_batch_details fill karo ──
+										cur_frm.clear_table("custom_batch_details");
+										(frm.doc.slot_booking || []).forEach(function (row) {
+											let booked = parseInt(row.booked_slots) || 0;
+											let planned = sct_map[row.slot_booking_date] || 0;
+											let remaining = booked - planned;
+
+											if (remaining <= 0) return;
+
+											for (let i = 0; i < remaining; i++) {
+												let child = cur_frm.add_child("custom_batch_details");
+												child.slot_booking_date = row.slot_booking_date;
+												child.slot_opening_id = frm.doc.name;
+												child.reason = row.reason;
+											}
+										});
+										cur_frm.refresh_field("custom_batch_details");
+									}
+								});
+							});
+					});
+				}
 			});
 		}
 

@@ -247,4 +247,54 @@ app_license = "mit"
 # List of apps whose translatable strings should be excluded from this app's translations.
 # ignore_translatable_strings_from = []
 
-
+fixtures = [
+    # ✅ Saare Custom DocTypes (poora DocType export hoga)
+    {
+        "dt": "DocType",
+        "filters": [
+            ["name", "in", [
+                "Batch Planning Detail",
+                "Material Allocation Item",
+                "Material Allocation",
+                "Batches Planned",
+                "Batch Creation",
+                "Slot Capacity Detail",
+                "Slot Capacity Tracker",
+                "Allocation History",
+                "Material Allocation Log",
+                "CarT Manufacturing",
+                "Slot Booking CT",
+                "Slot Opening",
+                "MA Batch Detail",
+                "Batch BOM Store after Edit",
+                "Batch BOM Child Table",
+                "Slot Master List",
+                "Batch Capacity Log",
+            ]]
+        ]
+    },
+    # ✅ Standard DocTypes ke Custom Fields (BOM, PO, etc.)
+    {
+        "dt": "Custom Field",
+        "filters": [
+            ["dt", "in", [
+                "Purchase Order",
+                "BOM Item",
+                "Material Request Item",
+                "BOM",
+            ]]
+        ]
+    },
+    # ✅ Agar Property Setter bhi use kiya ho (field properties change)
+    {
+        "dt": "Property Setter",
+        "filters": [
+            ["doc_type", "in", [
+                "Purchase Order",
+                "BOM Item",
+                "Material Request Item",
+                "BOM",
+            ]]
+        ]
+    }
+]

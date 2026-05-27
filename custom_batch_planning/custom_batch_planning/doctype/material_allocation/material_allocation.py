@@ -96,6 +96,17 @@ class MaterialAllocation(Document):
         if self.docstatus == 2:
             frappe.throw("Cannot deallocate a Cancelled document.")
 
+        existing_se = frappe.db.get_value(
+            "Stock Entry",
+            {"custom_material_allocation": self.name, "docstatus": 1},
+            "name",
+        )
+        if existing_se:
+            frappe.throw(
+                f"⛔ Deallocation blocked. Stock Entry <b>{existing_se}</b> has already been "
+                f"submitted. Items have been sent for manufacturing."
+            )
+
         for item in self.material_allocation:
             item.qty_allocated = 0
             item.shortage = flt(item.quantity_required)
@@ -254,12 +265,14 @@ def ma_get_allocated_qty(item_code, employee_function, exclude_parent=None, row_
 
     total_stock = flt(sle_stock[0][0]) if sle_stock else 0.0
 
+    # FIX: Exclude both 'Deallocated' AND 'Stock Entry Done' from allocated qty calculation
     query = """
         SELECT SUM(mai.qty_allocated)
         FROM `tabMaterial Allocation Item` mai
         INNER JOIN `tabMaterial Allocation` ma ON ma.name = mai.parent
         WHERE mai.item_code = %s AND ma.employee_function = %s
-        AND ma.allocation_status != 'Deallocated' AND ma.docstatus != 2
+        AND ma.allocation_status NOT IN ('Deallocated', 'Stock Entry Done')
+        AND ma.docstatus != 2
     """
     args = [item_code, employee_function]
     if exclude_parent:
@@ -343,3 +356,28 @@ def get_item_batch_expiry(item_codes):
             }
 
     return result
+
+
+@frappe.whitelist()
+def on_stock_entry_submit(stock_entry_name):
+    """
+    Called when Stock Entry linked to a Material Allocation is submitted.
+    Updates allocation_status to 'Stock Entry Done'.
+    """
+    ma_name = frappe.db.get_value(
+        "Stock Entry",
+        stock_entry_name,
+        "custom_material_allocation"
+    )
+    if not ma_name:
+        return
+
+    ma_doc = frappe.get_doc("Material Allocation", ma_name)
+
+    if ma_doc.allocation_status != "Allocated":
+        return
+
+    ma_doc.allocation_status = "Stock Entry Done"
+    ma_doc.flags.ignore_validate_update_after_submit = True
+    ma_doc.save(ignore_permissions=True)
+    frappe.db.commit()

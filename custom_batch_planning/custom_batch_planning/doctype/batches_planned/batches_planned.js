@@ -8,112 +8,120 @@ frappe.ui.form.on("Batches Planned", {
 		frm.page.clear_custom_actions();
 		render_bom_items(frm);
 		render_mp_placeholder(frm);
+		render_stock_entry_tab(frm);
+		render_items_tab(frm);
 
 		// ── Show buttons only if Approved ──
 		if (frm.doc.workflow_state === "Approved") {
-			frappe.db.get_value("Slot Opening", frm.doc.slot_opening_id, "batch_end_date", function(data) {
-				let today = frappe.datetime.nowdate();
-				if (!data || !data.batch_end_date || data.batch_end_date < today) return;
+			frappe.db.get_value(
+				"Slot Opening",
+				frm.doc.slot_opening_id,
+				"batch_end_date",
+				function (data) {
+					let today = frappe.datetime.nowdate();
+					if (!data || !data.batch_end_date || data.batch_end_date < today) return;
 
-				frm.add_custom_button("Run Material Planning", function () {
-				run_material_planning(frm);
-			}).addClass("btn-primary");
+					frm.add_custom_button("Run Material Planning", function () {
+						run_material_planning(frm);
+					}).addClass("btn-primary");
 
-			frm.add_custom_button(
-				"Material Allocation",
-				function () {
-					frappe.call({
-						method: "frappe.client.get_list",
-						args: {
-							doctype: "Material Allocation",
-							filters: { batch_planning: frm.doc.name },
-							fields: ["name", "allocation_status"],
-							order_by: "creation desc",
-						},
-						// YE WALA BLOCK RAKHO — sirf callback change hoga
-						callback: function (r) {
-							let existing = r.message || [];
-							let active = existing.filter(
-								(d) => d.allocation_status !== "Deallocated",
-							);
-							if (active.length > 0) {
-								frappe.confirm(
-									`Materials already allocated via <b>${active.map((d) => d.name).join(", ")}</b>.<br><br>Do you still want to create a new Material Allocation?`,
-									function () {
+					frm.add_custom_button(
+						"Material Allocation",
+						function () {
+							frappe.call({
+								method: "frappe.client.get_list",
+								args: {
+									doctype: "Material Allocation",
+									filters: { batch_planning: frm.doc.name },
+									fields: ["name", "allocation_status"],
+									order_by: "creation desc",
+								},
+								callback: function (r) {
+									let existing = r.message || [];
+									let active = existing.filter(
+										(d) => d.allocation_status !== "Deallocated",
+									);
+									if (active.length > 0) {
+										frappe.confirm(
+											`Materials already allocated via <b>${active.map((d) => d.name).join(", ")}</b>.<br><br>Do you still want to create a new Material Allocation?`,
+											function () {
+												open_new_ma(frm);
+											},
+										);
+									} else {
 										open_new_ma(frm);
-									}, // ← sirf naam change
-								);
-							} else {
-								open_new_ma(frm); // ← sirf naam change
-							}
+									}
+								},
+							});
 						},
-					});
-				},
-				"Create",
-			);
+						"Create",
+					);
 
-			frm.add_custom_button(
-				"Material Request",
-				function () {
-					let mp_data = frm._mp_data || [];
+					frm.add_custom_button(
+						"Material Request",
+						function () {
+							let mp_data = frm._mp_data || [];
 
-					if (!mp_data.length) {
-						frappe.msgprint({
-							title: "Run Material Planning First",
-							message:
-								"Please click <b>Run Material Planning</b> before creating a Material Request.",
-							indicator: "orange",
-						});
-						return;
-					}
-
-					let shortage_items = mp_data
-						.filter((row) => parseFloat(row.net_requirement || 0) > 0)
-						.map((row) => ({
-							item_code: row.item_code,
-							qty: parseFloat(row.net_requirement),
-							uom: row.uom,
-							schedule_date: frappe.datetime.add_days(
-								frappe.datetime.get_today(),
-								1,
-							),
-						}));
-
-					if (!shortage_items.length) {
-						frappe.msgprint({
-							title: "No Shortage",
-							message:
-								"All items have sufficient stock. No Material Request needed.",
-							indicator: "green",
-						});
-						return;
-					}
-
-					frappe
-						.new_doc("Material Request", {
-							material_request_type: "Manufacture",
-							custom_batch_no: frm.doc.name,
-							custom_employee_function: frm.doc.employee_function,
-							project: frm.doc.project,
-							custom_project_name: frm.doc.project_name,
-						})
-						.then(() => {
-							if (cur_frm) {
-								cur_frm.clear_table("items");
-								shortage_items.forEach((item) => {
-									let row = cur_frm.add_child("items");
-									row.item_code = item.item_code;
-									row.qty = item.qty;
-									row.uom = item.uom;
-									row.schedule_date = item.schedule_date;
+							if (!mp_data.length) {
+								frappe.msgprint({
+									title: "Run Material Planning First",
+									message:
+										"Please click <b>Run Material Planning</b> before creating a Material Request.",
+									indicator: "orange",
 								});
-								cur_frm.refresh_field("items");
+								return;
 							}
-						});
+
+							let shortage_items = mp_data
+								.filter((row) => parseFloat(row.net_requirement || 0) > 0)
+								.map((row) => ({
+									item_code: row.item_code,
+									qty: parseFloat(row.net_requirement),
+									uom: row.uom,
+									schedule_date: frappe.datetime.add_days(
+										frappe.datetime.get_today(),
+										1,
+									),
+								}));
+
+							if (!shortage_items.length) {
+								frappe.msgprint({
+									title: "No Shortage",
+									message:
+										"All items have sufficient stock. No Material Request needed.",
+									indicator: "green",
+								});
+								return;
+							}
+
+							frappe
+								.new_doc("Material Request", {
+									material_request_type: "Manufacture",
+									custom_batch_no: frm.doc.name,
+									custom_batch_planning: frm.doc.name,
+									custom_employee_function: frm.doc.employee_function,
+									project: frm.doc.project,
+									custom_project_name: frm.doc.project_name,
+								})
+								.then(() => {
+									if (cur_frm) {
+										cur_frm.clear_table("items");
+										shortage_items.forEach((item) => {
+											let row = cur_frm.add_child("items");
+											row.item_code = item.item_code;
+											row.qty = item.qty;
+											row.uom = item.uom;
+											row.conversion_factor = 1;
+											row.schedule_date = item.schedule_date;
+										});
+										cur_frm.refresh_field("items");
+									}
+								});
+						},
+						"Create",
+					);
 				},
-				"Create",
 			);
-			});
 		}
 	},
 });
@@ -140,8 +148,6 @@ function render_bom_items(frm) {
 			}
 
 			let rows = r.message.custom_batch_details || [];
-
-			// UPDATED: Using helper to find matched row
 			let matched = find_matched_row(rows, frm.doc.batch_planning_id, frm.doc.amended_from);
 
 			if (!matched || !matched.bom_list) {
@@ -296,6 +302,156 @@ function render_mp_placeholder(frm) {
     `);
 }
 
+// ============================================================
+// STOCK ENTRY TAB
+// ============================================================
+function render_stock_entry_tab(frm) {
+	let $field = frm.fields_dict["stock_entry_details"];
+	if (!$field) return;
+
+	frappe.call({
+		method: "frappe.client.get_list",
+		args: {
+			doctype: "Stock Entry",
+			filters: { custom_batch_planning: frm.doc.name },
+			fields: ["name", "posting_date", "docstatus", "custom_material_allocation"],
+			order_by: "creation desc",
+		},
+		callback: function (r) {
+			let entries = r.message || [];
+
+			if (!entries.length) {
+				$field.$wrapper.html(`
+                    <div style="padding:48px; text-align:center; color:#6b7280; border:2px dashed #d1fae5; border-radius:12px; background:#f0fdf4;">
+                        <div style="font-size:36px;">📦</div>
+                        <div style="font-size:15px; font-weight:700; color:#166534; margin-top:12px;">No Stock Entries Yet</div>
+                        <div style="font-size:13px; color:#4b5563; margin-top:6px;">Stock Entries created from Material Allocation will appear here.</div>
+                    </div>
+                `);
+				return;
+			}
+
+			let rows = entries
+				.map((se, i) => {
+					let status_color =
+						se.docstatus === 1
+							? "#16a34a"
+							: se.docstatus === 2
+								? "#dc2626"
+								: "#d97706";
+					let status_label =
+						se.docstatus === 1
+							? "Submitted"
+							: se.docstatus === 2
+								? "Cancelled"
+								: "Draft";
+					let bg = i % 2 === 0 ? "#f0faf4" : "#ffffff";
+					return `
+                    <tr style="background:${bg}; cursor:pointer;" onclick="frappe.set_route('Form', 'Stock Entry', '${se.name}')">
+                        <td style="padding:10px 12px; text-align:center; color:#6b7280; font-size:12px;">${i + 1}</td>
+                        <td style="padding:10px 12px;">
+                            <span style="background:#16a34a; color:#fff; padding:3px 10px; border-radius:5px; font-size:11px; font-weight:700;">${se.name}</span>
+                        </td>
+                        <td style="padding:10px 12px; color:#1f2937; font-size:13px;">${se.posting_date || "-"}</td>
+                        <td style="padding:10px 12px; color:#1f2937; font-size:13px;">${se.custom_material_allocation || "-"}</td>
+                        <td style="padding:10px 12px;">
+                            <span style="background:${status_color}20; color:${status_color}; padding:3px 10px; border-radius:20px; font-size:11px; font-weight:700;">${status_label}</span>
+                        </td>
+                    </tr>
+                `;
+				})
+				.join("");
+
+			$field.$wrapper.html(`
+                <div style="width:100%; font-family:inherit;">
+                    <div style="background:linear-gradient(135deg, #16a34a 0%, #14532d 100%); color:#fff; padding:16px 20px; border-radius:10px 10px 0 0; display:flex; justify-content:space-between; align-items:center;">
+                        <div style="font-size:15px; font-weight:700;">📦 Stock Entries</div>
+                        <div style="background:rgba(255,255,255,0.15); padding:6px 16px; border-radius:20px; font-size:13px; font-weight:700;">${entries.length} Entry(s)</div>
+                    </div>
+                    <div style="overflow-x:auto; border:1px solid #d1fae5; border-top:none; border-radius:0 0 10px 10px;">
+                        <table style="width:100%; border-collapse:collapse; font-size:13px;">
+                            <thead>
+                                <tr style="background:#dcfce7; border-bottom:2px solid #86efac;">
+                                    <th style="padding:11px 12px; text-align:center; color:#166534; font-size:11px; text-transform:uppercase;">#</th>
+                                    <th style="padding:11px 12px; text-align:left; color:#166534; font-size:11px; text-transform:uppercase;">Stock Entry</th>
+                                    <th style="padding:11px 12px; text-align:left; color:#166534; font-size:11px; text-transform:uppercase;">Date</th>
+                                    <th style="padding:11px 12px; text-align:left; color:#166534; font-size:11px; text-transform:uppercase;">Material Allocation</th>
+                                    <th style="padding:11px 12px; text-align:left; color:#166534; font-size:11px; text-transform:uppercase;">Status</th>
+                                </tr>
+                            </thead>
+                            <tbody>${rows}</tbody>
+                        </table>
+                    </div>
+                </div>
+            `);
+		},
+	});
+}
+
+function render_items_tab(frm) {
+	let $field = frm.fields_dict["custom_items_list"];
+	if (!$field) return;
+
+	frappe.call({
+		method: "custom_batch_planning.custom_batch_planning.doctype.batches_planned.batches_planned.get_stock_entry_items",
+		args: { batch_planning: frm.doc.name },
+		callback: function (r) {
+			let items_list = r.message || [];
+
+			if (!items_list.length) {
+				$field.$wrapper.html(empty_state("📦", "No Stock Entry Items found for this batch."));
+				return;
+			}
+
+			let rows_html = items_list.map(function (item, i) {
+				let bg = i % 2 === 0 ? "#f0faf4" : "#ffffff";
+				return `
+                    <tr style="background:${bg};">
+                        <td style="padding:10px 12px; text-align:center; color:#6b7280; font-weight:600; font-size:13px;">${i + 1}</td>
+                        <td style="padding:10px 12px;">
+                            <span style="background:#16a34a; color:#fff; padding:3px 10px; border-radius:5px; font-size:11px; font-weight:700; white-space:nowrap;">
+                                ${item.item_code}
+                            </span>
+                        </td>
+                        <td style="padding:10px 12px; color:#1f2937; font-size:13px;">${item.item_name || ""}</td>
+                        <td style="padding:10px 12px; text-align:center; font-weight:700; color:#15803d; font-size:13px;">${item.qty}</td>
+                        <td style="padding:10px 12px; text-align:center; color:#4b5563; font-size:12px;">${item.uom || ""}</td>
+                        <td style="padding:10px 12px; color:#4b5563; font-size:12px;">${item.s_warehouse || "-"}</td>
+                        <td style="padding:10px 12px; color:#4b5563; font-size:12px;">${item.t_warehouse || "-"}</td>
+                    </tr>`;
+			}).join("");
+
+			$field.$wrapper.html(`
+                <div style="width:100%; font-family:inherit;">
+                    <div style="background:linear-gradient(135deg, #16a34a 0%, #14532d 100%); color:#fff; padding:16px 20px; border-radius:10px 10px 0 0; display:flex; justify-content:space-between; align-items:center;">
+                        <div style="font-size:15px; font-weight:700;">🧾 Stock Entry Items</div>
+                        <div style="background:rgba(255,255,255,0.15); padding:6px 16px; border-radius:20px; font-size:13px; font-weight:700;">${items_list.length} Item(s)</div>
+                    </div>
+                    <div style="overflow-x:auto; border:1px solid #d1fae5; border-top:none; border-radius:0 0 10px 10px;">
+                        <table style="width:100%; border-collapse:collapse; font-size:13px;">
+                            <thead>
+                                <tr style="background:#dcfce7; border-bottom:2px solid #86efac;">
+                                    <th style="padding:11px 12px; text-align:center; color:#166534; font-size:11px; text-transform:uppercase;">#</th>
+                                    <th style="padding:11px 12px; text-align:left; color:#166534; font-size:11px; text-transform:uppercase;">Item Code</th>
+                                    <th style="padding:11px 12px; text-align:left; color:#166534; font-size:11px; text-transform:uppercase;">Item Name</th>
+                                    <th style="padding:11px 12px; text-align:center; color:#166534; font-size:11px; text-transform:uppercase;">Qty</th>
+                                    <th style="padding:11px 12px; text-align:center; color:#166534; font-size:11px; text-transform:uppercase;">UOM</th>
+                                    <th style="padding:11px 12px; text-align:left; color:#166534; font-size:11px; text-transform:uppercase;">Source Warehouse</th>
+                                    <th style="padding:11px 12px; text-align:left; color:#166534; font-size:11px; text-transform:uppercase;">Target Warehouse</th>
+                                </tr>
+                            </thead>
+                            <tbody>${rows_html}</tbody>
+                        </table>
+                    </div>
+                    <div style="padding:8px 16px; background:#f0fdf4; border:1px solid #d1fae5; border-top:none; border-radius:0 0 10px 10px; font-size:12px; color:#166534;">
+                        ✅ ${items_list.length} item(s) across all Stock Entries
+                    </div>
+                </div>
+            `);
+		}
+	});
+}
+
 function run_material_planning(frm) {
 	if (!frm.doc.employee_function || !frm.doc.batch_creation) {
 		frappe.msgprint({
@@ -331,8 +487,6 @@ function run_material_planning(frm) {
 				args: { doctype: "Batch Creation", name: frm.doc.batch_creation },
 				callback: function (r) {
 					let rows = r.message.custom_batch_details || [];
-
-					// UPDATED: Using helper to find matched row
 					let matched = find_matched_row(
 						rows,
 						frm.doc.batch_planning_id,
@@ -413,7 +567,7 @@ function render_mp_table(frm, data, warehouse) {
             <td style="padding:9px 10px; text-align:center; font-weight:700; color:#15803d; font-size:12px;">${row.total_stock}</td>
             <td style="padding:9px 10px; text-align:center; font-weight:700; color:#1d4ed8; font-size:12px;">${row.main_stock}</td>
             <td style="padding:9px 10px; text-align:center; font-weight:700; color:#d97706; font-size:12px;">${row.allocated_qty}</td>
-             <td style="padding:9px 10px; text-align:center; font-weight:700; font-size:12px; color:${parseFloat(row.free_stock) > 0 ? "#15803d" : "#dc2626"};">${row.free_stock}</td>
+            <td style="padding:9px 10px; text-align:center; font-weight:700; font-size:12px; color:${parseFloat(row.free_stock) > 0 ? "#15803d" : "#dc2626"};">${row.free_stock}</td>
             <td style="padding:9px 10px; text-align:center; font-weight:700; color:#7c3aed; font-size:12px;">${row.lab_stock}</td>
             <td style="padding:9px 10px; text-align:center; font-weight:700; color:#7c3aed; font-size:12px;">${row.open_pr}</td>
             <td style="padding:9px 10px; text-align:center; font-weight:700; color:#1d4ed8; font-size:12px;">${row.open_po}</td>
@@ -438,7 +592,7 @@ function render_mp_table(frm, data, warehouse) {
                 <th style="${th_style()}">Qty Req</th>
                 <th style="${th_style()}">Total Stock</th>
                 <th style="${th_style()}">Main Wh</th>
-                   <th style="${th_style()}">Allocated</th>
+                <th style="${th_style()}">Allocated</th>
                 <th style="${th_style()}">Free Qty</th>
                 <th style="${th_style()}">Lab Wise</th>
                 <th style="${th_style()}">Open PR</th>
@@ -484,6 +638,7 @@ function th_style(align = "center") {
 function empty_state(icon, msg) {
 	return `<div style="padding:48px; text-align:center; color:#6b7280; border:2px dashed #d1fae5; border-radius:12px; background:#f0fdf4;"><div style="font-size:36px;">${icon}</div><div style="font-size:13px;">${msg}</div></div>`;
 }
+
 function open_new_ma(frm) {
 	frappe.new_doc("Material Allocation", {
 		batch_planning: frm.doc.name,
