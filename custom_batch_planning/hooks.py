@@ -272,33 +272,7 @@ fixtures = [
             ]]
         ]
     },
-    {
-        "dt": "Client Script",
-        "filters": [
-            ["name", "in", [
-                "Line Of Business For Stock Entry",
-                "LOB Fetch to Items Table In Stock Entry",
-                "Warehouse For Stock Entry Target Warehouse Field",
-                "Stock Entry Employee id",
-                "In item Inspection Required before Manufacturing check Stock entry Inspection Required check also check",
-                "Stock batch Creation",
-                "Batch enable",
-                "Highlight  stock Entry",
-                "Flag indicates",
-                "Employee function Stock Entry",
-                "BOM Filter",
-                "Material request copy",
-                "Stock Entry With internal Transfer",
-                "Material Allocation — Expiry Status",
-                "MA-Stock-Allocation-View",
-                "Material Allocation — Auto Allocate",
-                "Inventory Oligo stock enttry",
-                "Planned Batches BOM component and material Planning",
-                "Warehouse For Stock Entry",
-                "Warehouse Main Store Condition",
-            ]]
-        ]
-    },
+   
     {
         "dt": "Custom Field",
         "filters": [
