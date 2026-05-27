@@ -248,7 +248,7 @@ app_license = "mit"
 # ignore_translatable_strings_from = []
 
 fixtures = [
-    # ✅ Saare Custom DocTypes (poora DocType export hoga)
+    # ✅ Sirf Custom DocTypes
     {
         "dt": "DocType",
         "filters": [
@@ -270,10 +270,10 @@ fixtures = [
                 "Batch BOM Child Table",
                 "Slot Master List",
                 "Batch Capacity Log",
-            ]]
+            ]],
         ]
     },
-    # ✅ Standard DocTypes ke Custom Fields (BOM, PO, etc.)
+    # ✅ Standard DocTypes ke Custom Fields alag se
     {
         "dt": "Custom Field",
         "filters": [
@@ -285,7 +285,6 @@ fixtures = [
             ]]
         ]
     },
-    # ✅ Agar Property Setter bhi use kiya ho (field properties change)
     {
         "dt": "Property Setter",
         "filters": [
@@ -298,3 +297,8 @@ fixtures = [
         ]
     }
 ]
+
+doctype_js = {
+    "Material Request": "public/js/material_request_prefill.js",
+    "Stock Entry": "public/js/stock_entry_ma_status.js"
+}
