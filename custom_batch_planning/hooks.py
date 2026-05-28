@@ -271,29 +271,6 @@ fixtures = [
                 "Batch Capacity Log",
             ]]
         ]
-    },
-   
-    {
-        "dt": "Custom Field",
-        "filters": [
-            ["dt", "in", [
-                "Purchase Order",
-                "BOM Item",
-                "Material Request Item",
-                "BOM",
-            ]]
-        ]
-    },
-    {
-        "dt": "Property Setter",
-        "filters": [
-            ["doc_type", "in", [
-                "Purchase Order",
-                "BOM Item",
-                "Material Request Item",
-                "BOM",
-            ]]
-        ]
     }
 ]
 
