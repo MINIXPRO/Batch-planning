@@ -249,26 +249,15 @@ app_license = "mit"
 
 fixtures = [
     {
-        "dt": "DocType",
+        "dt": "Custom Field",
         "filters": [
-            ["name", "in", [
-                "Batch Planning Detail",
-                "Material Allocation Item",
-                "Material Allocation",
-                "Batches Planned",
-                "Batch Creation",
-                "Slot Capacity Detail",
-                "Slot Capacity Tracker",
-                "Allocation History",
-                "Material Allocation Log",
-                "CarT Manufacturing",
-                "Slot Booking CT",
-                "Slot Opening",
-                "MA Batch Detail",
-                "Batch BOM Store after Edit",
-                "Batch BOM Child Table",
-                "Slot Master List",
-                "Batch Capacity Log",
+            ["fieldname", "in", [
+                "custom_batch_no",
+                "custom_employee_function",
+                "custom_employee_functions",
+                "custom_material_allocation",
+                "custom_batch_planning",
+                "custom_enable_manufacturing_batch"
             ]]
         ]
     }

@@ -1,7 +1,7 @@
 {
  "actions": [],
  "allow_rename": 1,
- "autoname": "SM-.YY.MM.-.####",
+ "autoname": "SM-.YY.-.MM.-.##",
  "creation": "2026-04-18 16:56:16.510491",
  "doctype": "DocType",
  "engine": "InnoDB",
@@ -92,7 +92,7 @@
    "fieldtype": "Select",
    "hidden": 1,
    "label": "Naming Series",
-   "options": "SM-.YY.MM.-.####"
+   "options": "SM-.YY.-.MM.-.##"
   }
  ],
  "grid_page_length": 50,

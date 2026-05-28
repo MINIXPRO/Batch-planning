@@ -1116,6 +1116,7 @@ window.create_stock_entry = function (frm) {
                                     frappe.new_doc("Stock Entry", {
                                         stock_entry_type: "Material Transfer",
                                         custom_batch_planning: frm.doc.batch_planning,
+                                        custom_batch_no: frm.doc.batch_planning,
                                         custom_material_allocation: frm.doc.name,
                                         from_warehouse: from_warehouse,
                                         project: frm.doc.project_id,
