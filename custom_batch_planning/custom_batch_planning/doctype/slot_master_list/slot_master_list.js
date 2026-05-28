@@ -64,11 +64,11 @@ frappe.ui.form.on('Slot Master List', {
             });
         }
 
-        let today = frappe.datetime.nowdate();
-
-        if (!frm.is_new() && frm.doc.docstatus === 1
-            && frm.doc.batch_end_date && frm.doc.batch_end_date >= today) {
-
+        if (!frm.is_new() && frm.doc.docstatus === 1 && frm.doc.workflow_state === "Approved") {
+            frappe.show_alert({
+                message: `DEBUG: Condition Met! docstatus: ${frm.doc.docstatus}, workflow_state: ${frm.doc.workflow_state}`,
+                indicator: 'green'
+            });
             frm.add_custom_button('📋 Create Slot Opening', function () {
                 frappe.model.with_doctype('Slot Opening', function () {
                     let new_doc = frappe.model.get_new_doc('Slot Opening');
@@ -78,12 +78,17 @@ frappe.ui.form.on('Slot Master List', {
                     frappe.set_route('Form', 'Slot Opening', new_doc.name);
                 });
             });
+        } else {
+            frappe.show_alert({
+                message: `DEBUG: Condition NOT Met! is_new: ${frm.is_new()}, docstatus: ${frm.doc.docstatus}, workflow_state: ${frm.doc.workflow_state}`,
+                indicator: 'orange'
+            });
         }
     },
 
     before_save: function (frm) {
         if (!frm.doc.naming_series) {
-            frm.set_value('naming_series', 'SM-.YY.MM.-.####');
+            frm.set_value('naming_series', 'SM-.YY.-MM.-.####');
         }
         calculate_totals(frm);
     }

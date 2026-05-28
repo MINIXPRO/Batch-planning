@@ -261,7 +261,6 @@ fixtures = [
                 "Slot Capacity Tracker",
                 "Allocation History",
                 "Material Allocation Log",
-                "CarT Manufacturing",
                 "Slot Booking CT",
                 "Slot Opening",
                 "MA Batch Detail",
@@ -269,6 +268,19 @@ fixtures = [
                 "Batch BOM Child Table",
                 "Slot Master List",
                 "Batch Capacity Log",
+            ]]
+        ]
+    },
+    {
+        "dt": "Custom Field",
+        "filters": [
+            ["fieldname", "in", [
+                "custom_batch_no",
+                "custom_employee_function",
+                "custom_employee_functions",
+                "custom_material_allocation",
+                "custom_batch_planning",
+                "custom_enable_manufacturing_batch"
             ]]
         ]
     }
