@@ -45,13 +45,13 @@ def get_all_batch_plannings(employee_function=None):
         # -----------------------------------------
 
         ma_data = frappe.db.sql(f"""
-            SELECT batch_planning, COUNT(*) as cnt
+            SELECT batches_planned, COUNT(*) as cnt
             FROM `tabMaterial Allocation`
-            WHERE batch_planning IN ({fmt})
+            WHERE batches_planned IN ({fmt})
             AND docstatus IN (0, 1)
-            GROUP BY batch_planning
+            GROUP BY batches_planned
         """, bp_names, as_dict=True)
-        ma_map = {r.batch_planning: r.cnt for r in ma_data}
+        ma_map = {r.batches_planned: r.cnt for r in ma_data}
 
         # -----------------------------------------
         # Linked MRs
@@ -105,7 +105,7 @@ def bp_cancel_with_workflow(name=None):
         linked_mas = frappe.get_all(
             "Material Allocation",
             filters={
-                "batch_planning": name,
+                "batches_planned": name,
                 "docstatus": ["!=", 2]
             },
             fields=["name", "docstatus"]

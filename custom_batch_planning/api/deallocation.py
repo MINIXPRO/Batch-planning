@@ -21,13 +21,14 @@ def get_all_material_allocations(employee_function=None):
         SELECT
             ma.name,
             ma.batch_planning,
+            ma.batches_planned,
             ma.warehouse,
             ma.workflow_state,
             ma.docstatus,
             ma.custom_allocation_status,
             ma.modified
         FROM `tabMaterial Allocation` ma
-        LEFT JOIN `tabBatches Planned` bp ON bp.name = ma.batch_planning
+        LEFT JOIN `tabBatches Planned` bp ON bp.name = ma.batches_planned
         {filters}
         ORDER BY ma.modified DESC
         LIMIT 99999

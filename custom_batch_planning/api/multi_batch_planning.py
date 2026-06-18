@@ -43,7 +43,7 @@ def get_approved_batch_plannings(employee_function=None, month=None):
             "month",
             "batch_type",
             "finished_item",
-            "batch_creation",
+            "batch_planning",
             "employee_function"
         ],
         order_by="batch_planning_id asc",
@@ -82,7 +82,7 @@ def get_multi_batch_material_plan(bp_names, employee_function=None):
     bom_items = []
     for bp_name in bp_names:
         bp_doc = frappe.get_doc("Batches Planned", bp_name)
-        if not bp_doc.batch_creation:
+        if not bp_doc.batch_planning:
             continue
 
         bd_rows = frappe.db.sql("""
@@ -90,13 +90,13 @@ def get_multi_batch_material_plan(bp_names, employee_function=None):
             FROM `tabBatch Planning Detail`
             WHERE parent = %s AND batch_planning_id = %s
             LIMIT 1
-        """, (bp_doc.batch_creation, bp_doc.batch_planning_id), as_dict=True)
+        """, (bp_doc.batch_planning, bp_doc.batch_planning_id), as_dict=True)
 
         if not bd_rows:
             continue
 
         bd = bd_rows[0]
-        batch_key = f"{bp_doc.batch_creation}-{bd.idx}"
+        batch_key = f"{bp_doc.batch_planning}-{bd.idx}"
 
         # Check Edited BOM First
         store = frappe.db.get_value("Batch BOM Store after Edit", {"batch_id": batch_key}, "name")
@@ -131,13 +131,13 @@ def get_multi_batch_material_plan(bp_names, employee_function=None):
     # ── Current Batch Allocations Map (Specific to these BPs) ──
     fmt = ",".join(["%s"] * len(bp_names))
     allocated = frappe.db.sql(f"""
-        SELECT ma.batch_planning AS bp_name, mai.item_code, SUM(mai.allocate_qty) AS allocated_qty
+        SELECT ma.batches_planned AS bp_name, mai.item_code, SUM(mai.allocate_qty) AS allocated_qty
         FROM `tabMaterial Allocation` ma
         JOIN `tabMaterial Allocation Item` mai ON mai.parent = ma.name
-        WHERE ma.batch_planning IN ({fmt})
+        WHERE ma.batches_planned IN ({fmt})
             AND ma.docstatus != 2
             AND ma.allocation_status != 'Deallocated'
-        GROUP BY ma.batch_planning, mai.item_code
+        GROUP BY ma.batches_planned, mai.item_code
     """, bp_names, as_dict=True)
 
     alloc_map = {}
@@ -163,27 +163,15 @@ def get_multi_batch_material_plan(bp_names, employee_function=None):
     for item_code, r in combined.items():
         qty_required = round(float(r["required_qty"] or 0), 6)
 
-        # 1. Main Warehouse Stock (Latest from SLE)
+        # 1. Main Warehouse Stock (from Bin)
         main_stock = 0.0
         if store_warehouse:
-            row = frappe.db.sql("""
-                SELECT qty_after_transaction FROM `tabStock Ledger Entry`
-                WHERE item_code = %s AND warehouse = %s AND is_cancelled = 0
-                ORDER BY posting_date DESC, posting_time DESC, creation DESC LIMIT 1
-            """, (item_code, store_warehouse))
-            if row:
-                main_stock = float(row[0][0] or 0)
+            main_stock = float(frappe.db.get_value("Bin", {"item_code": item_code, "warehouse": store_warehouse}, "actual_qty") or 0.0)
 
-        # 2. Lab Warehouse Stock
+        # 2. Lab Warehouse Stock (from Bin)
         lab_stock = 0.0
         for lab_wh in lab_warehouses:
-            row = frappe.db.sql("""
-                SELECT qty_after_transaction FROM `tabStock Ledger Entry`
-                WHERE item_code = %s AND warehouse = %s AND is_cancelled = 0
-                ORDER BY posting_date DESC, posting_time DESC, creation DESC LIMIT 1
-            """, (item_code, lab_wh))
-            if row:
-                lab_stock += float(row[0][0] or 0)
+            lab_stock += float(frappe.db.get_value("Bin", {"item_code": item_code, "warehouse": lab_wh}, "actual_qty") or 0.0)
 
         total_stock = main_stock + lab_stock
 

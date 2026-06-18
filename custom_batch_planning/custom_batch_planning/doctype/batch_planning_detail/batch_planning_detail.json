@@ -1,101 +1,92 @@
 {
- "actions": [],
- "allow_rename": 1,
- "creation": "2026-04-10 10:38:18.116778",
- "doctype": "DocType",
- "editable_grid": 1,
- "engine": "InnoDB",
- "field_order": [
-  "details_section",
-  "slot_opening_id",
-  "slot_booking_date",
-  "batch_type",
-  "finished_item",
-  "reason",
-  "batch_planning_id",
-  "bom_list",
-  "status"
- ],
- "fields": [
-  {
-   "fieldname": "details_section",
-   "fieldtype": "Section Break",
-   "label": "Details"
-  },
-  {
-   "fieldname": "slot_opening_id",
-   "fieldtype": "Link",
-   "in_list_view": 1,
-   "label": "Slot Opening ID",
-   "options": "Slot Opening",
-   "read_only": 1
-  },
-  {
-   "fieldname": "slot_booking_date",
-   "fieldtype": "Data",
-   "in_list_view": 1,
-   "label": "Slot Booking Date",
-   "read_only": 1
-  },
-  {
-   "fieldname": "batch_type",
-   "fieldtype": "Select",
-   "in_list_view": 1,
-   "label": "Batch Type",
-   "options": "\nManufacturing\nProcess Development\nMachine Trial",
-   "reqd": 1
-  },
-  {
-   "fieldname": "finished_item",
-   "fieldtype": "Link",
-   "in_standard_filter": 1,
-   "label": "Finished Item",
-   "options": "Item",
-   "reqd": 1
-  },
-  {
-   "fieldname": "reason",
-   "fieldtype": "Select",
-   "label": "Reason",
-   "options": "\nN/A\nMachine Under Maintenance\nManpower Shortage\nLow Demand\nOther Issues",
-   "read_only": 1
-  },
-  {
-   "fieldname": "batch_planning_id",
-   "fieldtype": "Data",
-   "in_standard_filter": 1,
-   "label": "Batch Planning ID",
-   "read_only": 1
-  },
-  {
-   "fieldname": "bom_list",
-   "fieldtype": "Link",
-   "in_list_view": 1,
-   "label": "Bom List",
-   "options": "BOM"
-  },
-  {
-   "fieldname": "status",
-   "fieldtype": "Select",
-   "in_list_view": 1,
-   "label": "Status",
-   "options": "Draft\nApproved\nCancelled",
-   "reqd": 1
-  }
- ],
- "grid_page_length": 50,
- "index_web_pages_for_search": 1,
- "istable": 1,
- "links": [],
- "modified": "2026-05-07 10:23:58.876651",
- "modified_by": "Administrator",
- "module": "Custom Batch Planning",
- "name": "Batch Planning Detail",
- "owner": "Administrator",
- "permissions": [],
- "row_format": "Dynamic",
- "rows_threshold_for_grid_search": 20,
- "sort_field": "modified",
- "sort_order": "DESC",
- "states": []
+    "actions": [],
+    "allow_rename": 1,
+    "creation": "2026-04-10 10:38:18.116778",
+    "doctype": "DocType",
+    "editable_grid": 1,
+    "engine": "InnoDB",
+    "field_order": [
+        "details_section",
+        "slot_opening_id",
+        "slot_booking_date",
+        "batch_type",
+        "finished_item",
+        "reason",
+        "batch_planning_id",
+        "bom_list"
+    ],
+    "fields": [
+        {
+            "fieldname": "details_section",
+            "fieldtype": "Section Break",
+            "label": "Details"
+        },
+        {
+            "fieldname": "slot_opening_id",
+            "fieldtype": "Link",
+            "in_list_view": 1,
+            "label": "Slot Opening ID",
+            "options": "Slot Opening",
+            "read_only": 1
+        },
+        {
+            "fieldname": "slot_booking_date",
+            "fieldtype": "Data",
+            "in_list_view": 1,
+            "label": "Slot Booking Date",
+            "read_only": 1
+        },
+        {
+            "fieldname": "batch_type",
+            "fieldtype": "Select",
+            "in_list_view": 1,
+            "label": "Batch Type",
+            "options": "\nManufacturing\nProcess Development\nMachine Trial",
+            "reqd": 1
+        },
+        {
+            "fieldname": "finished_item",
+            "fieldtype": "Link",
+            "in_standard_filter": 1,
+            "label": "Finished Item",
+            "options": "Item",
+            "reqd": 1
+        },
+        {
+            "fieldname": "reason",
+            "fieldtype": "Select",
+            "label": "Reason",
+            "options": "\nN/A\nMachine Under Maintenance\nManpower Shortage\nLow Demand\nOther Issues",
+            "read_only": 1
+        },
+        {
+            "fieldname": "batch_planning_id",
+            "fieldtype": "Data",
+            "in_standard_filter": 1,
+            "label": "Batch Planning ID",
+            "read_only": 1
+        },
+        {
+            "fieldname": "bom_list",
+            "fieldtype": "Link",
+            "in_list_view": 1,
+            "label": "Bom List",
+            "options": "BOM"
+        }
+    ],
+    "grid_page_length": 50,
+    "index_web_pages_for_search": 1,
+    "istable": 1,
+    "links": [],
+    "modified": "2026-06-18 15:34:28.616943",
+    "modified_by": "Administrator",
+    "module": "Custom Batch Planning",
+    "name": "Batch Planning Detail",
+    "owner": "Administrator",
+    "permissions": [],
+    "row_format": "Dynamic",
+    "rows_threshold_for_grid_search": 20,
+    "sort_field": "modified",
+    "sort_order": "DESC",
+    "states": []
 }

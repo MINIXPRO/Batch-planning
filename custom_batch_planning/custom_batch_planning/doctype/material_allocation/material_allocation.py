@@ -9,6 +9,25 @@ from frappe.utils import flt, getdate, today, now
 
 class MaterialAllocation(Document):
 
+    def validate(self):
+        for item in self.material_allocation:
+            qty_requested = flt(item.allocate_qty)
+            bom_qty = flt(item.quantity_required)
+            stock = flt(item.stock_available)
+
+            if qty_requested > stock:
+                frappe.throw(
+                    f"Row #{item.idx}: Stock Available ({stock}) is less than Qty Requested ({qty_requested}) for item {item.item_code}."
+                )
+            if qty_requested > bom_qty:
+                frappe.throw(
+                    f"Row #{item.idx}: Qty Requested ({qty_requested}) cannot exceed Consolidated BOM Qty ({bom_qty}) for item {item.item_code}."
+                )
+            if qty_requested != bom_qty and not (item.reason or "").strip():
+                frappe.throw(
+                    f"Row #{item.idx}: Reason is mandatory because Qty Requested ({qty_requested}) differs from Consolidated BOM Qty ({bom_qty}) for item {item.item_code}."
+                )
+
     # ═══════════════════════════════════════════════
     # PART 1 — AUTO ALLOCATION LOGIC
     # ═══════════════════════════════════════════════
@@ -40,14 +59,8 @@ class MaterialAllocation(Document):
             if qty_needed <= 0:
                 continue
 
-            # Fetch latest stock available
-            sle_stock = frappe.db.sql("""
-                SELECT qty_after_transaction FROM `tabStock Ledger Entry`
-                WHERE item_code = %s AND warehouse = %s AND is_cancelled = 0
-                ORDER BY posting_date DESC, posting_time DESC, creation DESC LIMIT 1
-            """, (item.item_code, warehouse))
-
-            item.stock_available = flt(sle_stock[0][0]) if sle_stock else 0.0
+            # Fetch latest stock available (from Bin)
+            item.stock_available = flt(frappe.db.get_value("Bin", {"item_code": item.item_code, "warehouse": warehouse}, "actual_qty"))
 
             # FEFO Batch Allocation
             batches = self.get_batches(item.item_code, warehouse)
@@ -176,12 +189,23 @@ class MaterialAllocation(Document):
                     item_map[item.item_code] = {
                         "item_code": item.item_code,
                         "item_name": item.item_name,
-                        "quantity_required": item.quantity_required,
-                        "qty_allocated": 0,
+                        "uom": item.uom,
+                        "quantity_required": 0.0,
+                        "stock_available": 0.0,
+                        "allocate_qty": 0.0,
+                        "qty_allocated": 0.0,
+                        "shortage": 0.0,
+                        "open_pr": flt(item.open_pr),
+                        "open_po": flt(item.open_po),
+                        "grn_qty": flt(item.grn_qty),
                         "status": "Allocated",
                         "allocated_on": now(),
                     }
+                item_map[item.item_code]["quantity_required"] += flt(item.quantity_required)
+                item_map[item.item_code]["stock_available"] = flt(item.stock_available)
+                item_map[item.item_code]["allocate_qty"] += flt(item.allocate_qty)
                 item_map[item.item_code]["qty_allocated"] += flt(item.qty_allocated)
+                item_map[item.item_code]["shortage"] += flt(item.shortage)
 
         for item_data in item_map.values():
             log.append("ma_logs", item_data)
@@ -257,13 +281,8 @@ def ma_get_allocated_qty(item_code, employee_function, exclude_parent=None, row_
     if not warehouse:
         return {"free_stock": 0, "allocated_qty": 0}
 
-    sle_stock = frappe.db.sql("""
-        SELECT qty_after_transaction FROM `tabStock Ledger Entry`
-        WHERE item_code = %s AND warehouse = %s AND is_cancelled = 0
-        ORDER BY posting_date DESC, posting_time DESC, creation DESC LIMIT 1
-    """, (item_code, warehouse))
-
-    total_stock = flt(sle_stock[0][0]) if sle_stock else 0.0
+    # Fetch latest stock available (from Bin)
+    total_stock = flt(frappe.db.get_value("Bin", {"item_code": item_code, "warehouse": warehouse}, "actual_qty"))
 
     # FIX: Exclude both 'Deallocated' AND 'Stock Entry Done' from allocated qty calculation
     query = """

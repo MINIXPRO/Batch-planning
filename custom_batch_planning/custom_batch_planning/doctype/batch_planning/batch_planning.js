@@ -8,13 +8,18 @@ if (typeof XLSX === 'undefined') {
 }
 
 // ─────────────────────────────────────────────
-// Batch Creation — Main Form
+// Batch Planning — Main Form
 // ─────────────────────────────────────────────
-frappe.ui.form.on('Batch Creation', {
+frappe.ui.form.on('Batch Planning', {
 
-
-
-    setup: function (frm) {
+    refresh: function (frm) {
+        if (frm.fields_dict['custom_batch_details']) {
+            let grid = frm.fields_dict['custom_batch_details'].grid;
+            grid.cannot_add_rows = true;
+            grid.cannot_delete_rows = true;
+        }
+        set_project_filter(frm);
+        // ✅ set_query yahan move kiya — setup se hataya
         frm.set_query('bom_list', 'custom_batch_details', function (doc, cdt, cdn) {
             let row = locals[cdt][cdn];
             let filters = { docstatus: 1, is_active: 1 };
@@ -24,139 +29,36 @@ frappe.ui.form.on('Batch Creation', {
             return { filters: filters };
         });
 
-        frm.set_query('finished_item', 'custom_batch_details', function () {
+        frm.set_query('finished_item', 'custom_batch_details', function (doc) {
             return {
-                filters: { item_group: 'Finish Goods' }
+                query: 'custom_batch_planning.custom_batch_planning.doctype.batch_planning.batch_planning.get_project_finished_items',
+                filters: {
+                    project: doc.project || ''
+                }
             };
         });
-    },
 
-    custom_employee_function: function (frm) {
-        if (frm.is_new() && !frm._emp_func_initialized) {
-            frm._emp_func_initialized = true;
-            if (frm.doc.slot_opening) {
-                load_used_slots(frm);
-                return;
-            }
-        }
-
-        frm.set_value('slot_opening', '');
-        frm.set_value('month', '');
-        frm.clear_table('slot_opening_table');
-        frm.clear_table('custom_batch_details');
-        frm.refresh_field('slot_opening_table');
-        frm.refresh_field('custom_batch_details');
-        load_used_slots(frm);
-    },
-
-    slot_opening: function (frm) {
-        if (frm.doc.slot_opening && !frm.doc.custom_employee_function) {
-            frappe.msgprint({
-                title: __("Missing Employee Function"),
-                message: __("Please select an Employee Function first before selecting a Slot Opening."),
-                indicator: "orange"
-            });
-            frm.set_value("slot_opening", "");
-            return;
-        }
-
-        if (!frm.doc.slot_opening) {
-            frm.set_value('month', '');
-            frm.clear_table('slot_opening_table');
-            frm.clear_table('custom_batch_details');
-            frm.refresh_field('slot_opening_table');
-            frm.refresh_field('custom_batch_details');
-            return;
-        }
-
-        frappe.call({
-            method: 'frappe.client.get',
-            args: { doctype: 'Slot Opening', name: frm.doc.slot_opening },
-            callback: function (r) {
-                if (!r.message) return;
-                let rows = r.message.slot_booking || [];
-
-                if (r.message.custom_project) {
-                    frm.set_value('custom_project_id', r.message.custom_project);
+        frm.set_query('finished_item', function (doc) {
+            return {
+                query: 'custom_batch_planning.custom_batch_planning.doctype.batch_planning.batch_planning.get_project_finished_items',
+                filters: {
+                    project: doc.project || ''
                 }
-                if (r.message.custom_project_name) {
-                    frm.set_value('custom_project_name', r.message.custom_project_name);
-                }
-
-                let future_rows = rows; // Remove past-date filter
-
-                if (future_rows.length === 0) {
-                    frappe.msgprint({
-                        title: '⛔ No Slots Found',
-                        message: `The selected slot <b>${frm.doc.slot_opening}</b> has no booking dates.`,
-                        indicator: 'red'
-                    });
-                    frm.set_value('slot_opening', '');
-                    frm.set_value('month', '');
-                    frm.clear_table('slot_opening_table');
-                    frm.clear_table('custom_batch_details');
-                    frm.refresh_field('slot_opening_table');
-                    frm.refresh_field('custom_batch_details');
-                    return;
-                }
-
-                if (future_rows.length > 0 && future_rows[0].slot_booking_date) {
-                    let date = new Date(future_rows[0].slot_booking_date);
-                    frm.set_value('month', date.toLocaleString('en-US', { month: 'long' }));
-                }
-
-                frm.clear_table('slot_opening_table');
-                future_rows.forEach(function (row) {
-                    let nr = frm.add_child('slot_opening_table');
-                    nr.slot_booking_date = row.slot_booking_date;
-                    nr.how_many_slots_per_day = row.how_many_slots_per_day;
-                    nr.total_slots = row.total_slots;
-                    nr.booked_slots = row.booked_slots;
-                    nr.availabe_capacity = row.availabe_capacity;
-                    nr.reason = row.reason;
-                });
-                frm.refresh_field('slot_opening_table');
-
-                frappe.call({
-                    method: 'custom_batch_planning.custom_batch_planning.doctype.slot_opening.slot_opening.get_sct_details',
-                    args: { slot_master: r.message.slot_master },
-                    callback: function (sct_r) {
-                        let sct_map = {};
-                        (sct_r.message || []).forEach(function (d) {
-                            sct_map[d.date] = parseInt(d.batches_planned) || 0;
-                        });
-
-                        frm.clear_table('custom_batch_details');
-                        future_rows.forEach(function (slot) {
-                            let booked = parseInt(slot.booked_slots) || 0;
-                            let planned = sct_map[slot.slot_booking_date] || 0;
-                            let remaining = booked - planned;
-
-                            if (remaining <= 0) return;
-
-                            for (let i = 0; i < remaining; i++) {
-                                let child = frm.add_child('custom_batch_details');
-                                child.slot_opening_id = frm.doc.slot_opening;
-                                child.slot_booking_date = slot.slot_booking_date;
-                                child.reason = slot.reason;
-                            }
-                        });
-                        frm.refresh_field('custom_batch_details');
-
-                        frappe.show_alert({
-                            message: `✅ Slots loaded from ${frm.doc.slot_opening}`,
-                            indicator: 'green'
-                        }, 4);
-                    }
-                });
-            }
+            };
         });
-    },
 
-    refresh: function (frm) {
+        frm.set_query('bom_list', function (doc) {
+            let filters = { docstatus: 1, is_active: 1 };
+            if (doc.finished_item) {
+                filters['item'] = doc.finished_item;
+            }
+            return { filters: filters };
+        });
+
         load_used_slots(frm);
 
-        if (frm.is_new() && frm.doc.slot_opening) {
+        if (frm.is_new() && frm.doc.slot_opening && !frm._slot_loaded) {
+            frm._slot_loaded = true;
             frm.trigger('slot_opening');
         }
 
@@ -169,17 +71,343 @@ frappe.ui.form.on('Batch Creation', {
         if (!frm.is_new()) {
             frm.add_custom_button(__('View Batches Planned'), function () {
                 frappe.route_options = {
-                    "batch_creation": frm.doc.name
+                    "batch_planning": frm.doc.name
                 };
                 frappe.set_route('List', 'Batches Planned');
             });
         }
 
         setup_eye_buttons(frm);
+
+        if (frm.doc.docstatus === 1 || frm.doc.workflow_state === 'Approved') {
+            render_bom_components_tab(frm);
+            // Load persisted data from localStorage if not already in memory
+            if (!frm._mp_data) {
+                const stored = localStorage.getItem('mp_' + frm.doc.name);
+                if (stored) {
+                    try { frm._mp_data = JSON.parse(stored); } catch(e) { console.error('Failed to parse stored material planning data', e); }
+                }
+            }
+            // Render material planning based on available data
+            if (frm._mp_data && frm._mp_data.length) {
+                render_material_planning_tab(frm);
+            } else {
+                render_material_planning_placeholder(frm);
+            }
+
+            frm.remove_custom_button(__("Run Material Planning"));
+            frm.add_custom_button(__("Run Material Planning"), function () {
+                render_material_planning_tab(frm);
+            }).addClass("btn-primary");
+
+            // Material Allocation button
+            frm.remove_custom_button(__("Material Allocation"), __("Create"));
+            frm.add_custom_button(__("Material Allocation"), function () {
+                frappe.call({
+                    method: "custom_batch_planning.custom_batch_planning.doctype.batch_planning.batch_planning.create_bulk_material_allocations",
+                    args: { batch_planning_name: frm.doc.name },
+                    freeze: true,
+                    freeze_message: __("Preparing Material Allocation..."),
+                    callback: function (r) {
+                        if (r.message) {
+                            if (typeof r.message === "string" && r.message.indexOf("already exists") !== -1) {
+                                frappe.msgprint({
+                                    title: __("Material Allocation"),
+                                    message: r.message,
+                                    indicator: "orange"
+                                });
+                            } else {
+                                frappe.new_doc("Material Allocation", r.message);
+                            }
+                        }
+                    }
+                });
+            }, __("Create"));
+
+            // Material Request button
+            frm.remove_custom_button(__("Material Request"), __("Create"));
+            frm.add_custom_button(__("Material Request"), function () {
+                frappe.call({
+                    method: "custom_batch_planning.custom_batch_planning.doctype.batch_planning.batch_planning.get_batch_wise_shortages",
+                    args: { doc_name: frm.doc.name },
+                    freeze: true,
+                    freeze_message: __("Calculating batch-wise shortages..."),
+                    callback: function (r) {
+                        let shortages = r.message || [];
+                        if (!shortages.length) {
+                            frappe.msgprint({
+                                title: __("No Shortage"),
+                                message: __("All items have sufficient stock. No Material Request needed."),
+                                indicator: "green",
+                            });
+                            return;
+                        }
+
+                        frappe.new_doc("Material Request", {
+                            material_request_type: "Manufacture",
+                            custom_employee_function: frm.doc.custom_employee_function,
+                            project: frm.doc.project,
+                            custom_batch_planning_no: frm.doc.name,
+                        }).then(() => {
+                            if (cur_frm) {
+                                cur_frm.set_value("project", frm.doc.project);
+                                cur_frm.set_value("custom_batch_planning_no", frm.doc.name);
+                                cur_frm.clear_table("items");
+                                shortages.forEach((item) => {
+                                    let row = cur_frm.add_child("items");
+                                    row.item_code = item.item_code;
+                                    row.qty = item.qty;
+                                    row.uom = item.uom;
+                                    row.conversion_factor = 1;
+                                    row.schedule_date = item.schedule_date;
+                                    row.custom_batch_planning_no = item.custom_batch_planning_no;
+                                    row.custom_batch_reference = item.custom_batch_reference;
+                                    row.project = frm.doc.project;
+                                });
+                                cur_frm.refresh_field("items");
+                            }
+                        });
+                    }
+                });
+            }, __("Create"));
+
+        } else {
+            frm.remove_custom_button(__("Run Material Planning"));
+            frm.remove_custom_button(__("Material Allocation"), __("Create"));
+            frm.remove_custom_button(__("Material Request"), __("Create"));
+        }
+    },
+
+    finished_item: function (frm) {
+        if (frm._bulk_populating) return;
+        if (!frm.doc.finished_item && frm.doc.bom_list) {
+            frm.set_value('bom_list', '');
+        }
+        frm._bulk_populating = true;
+        let promises = [];
+        (frm.doc.custom_batch_details || []).forEach(row => {
+            promises.push(frappe.model.set_value(row.doctype, row.name, 'finished_item', frm.doc.finished_item || ''));
+            promises.push(frappe.model.set_value(row.doctype, row.name, 'bom_list', ''));
+        });
+        Promise.all(promises).then(() => {
+            frm._bulk_populating = false;
+            frm.refresh_field('custom_batch_details');
+        });
+    },
+
+    bom_list: function (frm) {
+        if (frm._bulk_populating) return;
+        frm._bulk_populating = true;
+        let promises = [];
+        (frm.doc.custom_batch_details || []).forEach(row => {
+            if (row.finished_item === frm.doc.finished_item) {
+                promises.push(frappe.model.set_value(row.doctype, row.name, 'bom_list', frm.doc.bom_list || ''));
+            }
+        });
+        Promise.all(promises).then(() => {
+            frm._bulk_populating = false;
+            frm.refresh_field('custom_batch_details');
+        });
+    },
+
+    custom_employee_function: function (frm) {
+        if (frm._setting_from_slot_opening) {
+            return;
+        }
+
+        if (frm.is_new() && !frm._emp_func_initialized) {
+            frm._emp_func_initialized = true;
+            if (frm.doc.slot_opening) {
+                load_used_slots(frm);
+                return;
+            }
+        }
+
+        frm.set_value('slot_opening', '');
+        frm.set_value('custom_slot_master', '');
+        frm.set_value('project', '');
+        set_project_filter(frm);
+        frm.set_value('month', '');
+        frm.clear_table('slot_opening_table');
+        frm.clear_table('custom_batch_details');
+
+        if (frm.doc.custom_employee_function) {
+            frappe.db.get_value('Employee Function', frm.doc.custom_employee_function, 'function_head_name')
+                .then(r => {
+                    if (r && r.message) {
+                        frm.set_value('custom_employee_headname', r.message.function_head_name);
+                    }
+                });
+        } else {
+            frm.set_value('custom_employee_headname', '');
+        }
+
+        load_used_slots(frm);
+    },
+
+    custom_slot_master: function (frm) {
+        if (frm._setting_from_slot_opening) {
+            return;
+        }
+
+        if (!frm.doc.custom_slot_master) {
+            return;
+        }
+
+        frappe.call({
+            method: 'frappe.client.get',
+            args: { doctype: 'Slot Master List', name: frm.doc.custom_slot_master },
+            callback: function (r) {
+                if (!r.message) return;
+
+                frm._setting_from_slot_opening = true;
+                let promises = [];
+                if (r.message.employee_function) {
+                    promises.push(frm.set_value('custom_employee_function', r.message.employee_function));
+                }
+                if (r.message.employee_function_head_name) {
+                    promises.push(frm.set_value('custom_employee_headname', r.message.employee_function_head_name));
+                }
+                if (r.message.project) {
+                    promises.push(frm.set_value('project', r.message.project));
+                }
+
+                Promise.all(promises).then(() => {
+                    frm._setting_from_slot_opening = false;
+                    load_used_slots(frm);
+                });
+            }
+        });
+    },
+
+    slot_opening: function (frm) {
+        // 1. Clear fields and tables if the slot_opening field is emptied
+        if (!frm.doc.slot_opening) {
+            frm.set_value('month', '');
+            frm.set_value('custom_slot_master', '');
+            frm.set_value('project', '');
+            frm.clear_table('slot_opening_table');
+            frm.clear_table('custom_batch_details');
+            frm.refresh_field('slot_opening_table');
+            frm.refresh_field('custom_batch_details');
+            return;
+        }
+
+        // Clear tables immediately to prevent duplicate stacking while loading
+        frm.clear_table('slot_opening_table');
+        frm.clear_table('custom_batch_details');
+
+        // 2. Fetch data from Slot Opening Doctype
+        frappe.call({
+            method: 'frappe.client.get',
+            args: { doctype: 'Slot Opening', name: frm.doc.slot_opening },
+            callback: function (r) {
+                if (!r.message) return;
+
+                frm._setting_from_slot_opening = true;
+                let promises = [];
+
+                if (r.message.employee_function) {
+                    promises.push(frm.set_value('custom_employee_function', r.message.employee_function));
+                }
+                if (r.message.function_head_name) {
+                    promises.push(frm.set_value('custom_employee_headname', r.message.function_head_name));
+                }
+                if (r.message.slot_master) {
+                    promises.push(frm.set_value('custom_slot_master', r.message.slot_master));
+                }
+                if (r.message.project) {
+                    promises.push(frm.set_value('project', r.message.project));
+                }
+
+                // WE WAIT until all parent fields are set before touching child tables
+                Promise.all(promises).then(() => {
+                    frm._setting_from_slot_opening = false;
+
+                    let future_rows = r.message.slot_booking || [];
+
+                    // 3. Handle Empty Bookings Case
+                    if (future_rows.length === 0) {
+                        frappe.msgprint({
+                            title: '⛔ No Slots Found',
+                            message: `The selected slot <b>${frm.doc.slot_opening}</b> has no booking dates.`,
+                            indicator: 'red'
+                        });
+                        frm.set_value('slot_opening', '');
+                        frm.set_value('month', '');
+                        frm.clear_table('slot_opening_table');
+                        frm.clear_table('custom_batch_details');
+                        frm.refresh_field('slot_opening_table');
+                        frm.refresh_field('custom_batch_details');
+                        return;
+                    }
+
+                    // 4. Set month field from first booking date
+                    if (future_rows[0].slot_booking_date) {
+                        let date = new Date(future_rows[0].slot_booking_date);
+                        frm.set_value('month', date.toLocaleString('en-US', { month: 'long' }));
+                    }
+
+                    // 5. Populate Main Slot Table
+                    future_rows.forEach(function (row) {
+                        let nr = frm.add_child('slot_opening_table');
+                        nr.slot_booking_date = row.slot_booking_date;
+                        nr.how_many_slots_per_day = row.how_many_slots_per_day;
+                        nr.total_slots = row.total_slots;
+                        nr.booked_slots = row.booked_slots;
+                        nr.availabe_capacity = row.availabe_capacity;
+                        nr.reason = row.reason;
+                    });
+                    frm.refresh_field('slot_opening_table');
+
+                    // 6. Fetch Planned Batches Details
+                    frappe.call({
+                        method: 'custom_batch_planning.custom_batch_planning.doctype.slot_opening.slot_opening.get_sct_details',
+                        args: { slot_master: r.message.slot_master },
+                        callback: function (sct_r) {
+                            console.log("sct_r.message", sct_r.message);
+
+                            if (!frm.fields_dict['custom_batch_details'] || !frm.fields_dict['custom_batch_details'].grid) {
+                                return;
+                            }
+
+                            let sct_map = {};
+                            (sct_r.message || []).forEach(function (d) {
+                                sct_map[d.date] = parseInt(d.batches_planned) || 0;
+                            });
+
+                            // Populate Custom Batch Details Table
+                            future_rows.forEach(function (slot) {
+                                let booked = parseInt(slot.booked_slots) || 0;
+                                let planned = sct_map[slot.slot_booking_date] || 0;
+                                let remaining = booked - planned;
+
+                                if (remaining <= 0) return;
+
+                                for (let i = 0; i < remaining; i++) {
+                                    let child = frm.add_child('custom_batch_details');
+                                    child.slot_opening_id = frm.doc.slot_opening;
+                                    child.slot_booking_date = slot.slot_booking_date;
+                                    child.reason = slot.reason;
+                                    child.status = "Approved";
+                                }
+                            });
+
+                            // Force layout rendering refresh
+                            frm.refresh_field('custom_batch_details');
+
+                            frappe.show_alert({
+                                message: `✅ Slots successfully loaded!`,
+                                indicator: 'green'
+                            }, 4);
+                        }
+                    });
+                });
+            }
+        });
     },
 
     after_save: function (frm) {
-        // ── Fix Batch BOM Store after Edit keys after save ──
         frappe.call({
             method: 'frappe.client.get_list',
             args: {
@@ -218,7 +446,7 @@ frappe.ui.form.on('Batch Creation', {
 
         if (frm.doc.workflow_state === 'Approved' && frm.doc.docstatus === 1) {
             frappe.call({
-                method: 'custom_batch_planning.custom_batch_planning.doctype.batch_creation.batch_creation.create_batches_planned',
+                method: 'custom_batch_planning.custom_batch_planning.doctype.batch_planning.batch_planning.create_batches_planned',
                 args: {
                     doc_name: frm.doc.name
                 },
@@ -254,6 +482,7 @@ frappe.ui.form.on('Batch Creation', {
 frappe.ui.form.on('Batch Planning Detail', {
 
     batch_type: function (frm, cdt, cdn) {
+        if (frm._bulk_populating) return;
         let row = locals[cdt][cdn];
         if (!row.batch_type || !row.slot_opening_id) return;
 
@@ -261,13 +490,12 @@ frappe.ui.form.on('Batch Planning Detail', {
 
         frm._counter_queue = frm._counter_queue.then(function () {
             return new Promise(function (resolve) {
-                // Collect already assigned IDs in current doc
                 let assigned_ids = (frm.doc.custom_batch_details || [])
                     .filter(r => r.batch_planning_id && r.name !== row.name)
                     .map(r => r.batch_planning_id);
 
                 frappe.call({
-                    method: 'custom_batch_planning.custom_batch_planning.doctype.batch_creation.batch_creation.get_next_batch_counter',
+                    method: 'custom_batch_planning.custom_batch_planning.doctype.batch_planning.batch_planning.get_next_batch_counter',
                     args: {
                         slot_opening_id: row.slot_opening_id,
                         batch_type: row.batch_type,
@@ -277,13 +505,21 @@ frappe.ui.form.on('Batch Planning Detail', {
                         if (r.message) {
                             frappe.model.set_value(cdt, cdn, 'batch_planning_id', r.message);
                         }
+                        if (frm.doc.finished_item) {
+                            frappe.model.set_value(cdt, cdn, 'finished_item', frm.doc.finished_item);
+                            if (frm.doc.bom_list) {
+                                frappe.model.set_value(cdt, cdn, 'bom_list', frm.doc.bom_list);
+                            }
+                        }
                         resolve();
                     }
                 });
             });
         });
     },
+
     finished_item: function (frm, cdt, cdn) {
+        if (frm._bulk_populating) return;
         let row = locals[cdt][cdn];
 
         if (row.finished_item && !row.batch_type) {
@@ -300,6 +536,7 @@ frappe.ui.form.on('Batch Planning Detail', {
     },
 
     bom_list: function (frm, cdt, cdn) {
+        if (frm._bulk_populating) return;
         let row = locals[cdt][cdn];
 
         if (row.bom_list && !row.finished_item) {
@@ -315,7 +552,11 @@ frappe.ui.form.on('Batch Planning Detail', {
         if (!row.bom_list) return;
 
         open_bom_dialog(frm, cdt, cdn, row.bom_list, row.batch_type);
-        setup_eye_buttons(frm);
+
+        // ✅ Delay diya taaki grid pehle render ho jaye
+        setTimeout(function () {
+            setup_eye_buttons(frm);
+        }, 500);
     }
 });
 
@@ -416,7 +657,6 @@ function open_bom_dialog(frm, cdt, cdn, bom_name, batch_type) {
 
 // ─────────────────────────────────────────────
 // Render Dialog
-// existing_doc_name = name of Batch BOM Store after Edit doc if exists, else null
 // ─────────────────────────────────────────────
 function render_bom_dialog(frm, cdt, cdn, bom_name, batch_type, is_readonly, final_items, existing_doc_name) {
 
@@ -428,15 +668,13 @@ function render_bom_dialog(frm, cdt, cdn, bom_name, batch_type, is_readonly, fin
             fieldname: 'toolbar_html',
             options: get_toolbar_html({ non_stock: false, moq: false, safety: false })
         });
-    }
-    else {
+    } else {
         let banner_html = `<div style="background:#fff8e1;border:1px solid #ffe082;
             border-radius:4px;padding:8px 12px;margin-bottom:10px;
             font-size:12px;color:#795548;">
             🔒 BOM is read-only. Items cannot be edited.
         </div>`;
 
-        // Add checkboxes for Manufacturing
         if (batch_type === 'Manufacturing') {
             let locked_states = ['Pending Approval', 'Approved', 'Rejected'];
             let dis = locked_states.includes(frm.doc.workflow_state) ? 'disabled' : '';
@@ -581,7 +819,6 @@ function render_bom_dialog(frm, cdt, cdn, bom_name, batch_type, is_readonly, fin
         bind_dialog_events(d);
     }
 
-    // ── Checkbox handler — Manufacturing only ──
     if (batch_type === 'Manufacturing') {
         let original_items = final_items.map(function (i) {
             return { item_code: i.item_code, item_name: i.item_name, uom: i.uom, qty: i.qty };
@@ -604,7 +841,7 @@ function render_bom_dialog(frm, cdt, cdn, bom_name, batch_type, is_readonly, fin
 
             let item_codes = original_items.map(function (i) { return i.item_code; });
             frappe.call({
-                method: 'custom_batch_planning.custom_batch_planning.doctype.batch_creation.batch_creation.get_item_details_for_bom',
+                method: 'custom_batch_planning.custom_batch_planning.doctype.batch_planning.batch_planning.get_item_details_for_bom',
                 args: { item_codes: JSON.stringify(item_codes) },
                 callback: function (r) {
                     if (!r.message) return;
@@ -956,7 +1193,7 @@ function load_used_slots(frm) {
     if (!frm.doc.custom_employee_function) return;
 
     frappe.call({
-        method: 'custom_batch_planning.custom_batch_planning.doctype.batch_creation.batch_creation.get_valid_slot_openings',
+        method: 'custom_batch_planning.custom_batch_planning.doctype.batch_planning.batch_planning.get_valid_slot_openings',
         args: {
             employee_function: frm.doc.custom_employee_function,
             current_doc: frm.doc.name || ''
@@ -975,21 +1212,31 @@ function load_used_slots(frm) {
 }
 
 // ─────────────────────────────────────────────
-// Eye Button Setup
+// Eye Button Setup — with all guards
 // ─────────────────────────────────────────────
 function setup_eye_buttons(frm) {
+    // ✅ Observer pehle disconnect karo
     if (frm._bom_observer) {
         frm._bom_observer.disconnect();
         frm._bom_observer = null;
     }
 
-    let grid = frm.fields_dict['custom_batch_details'] &&
-        frm.fields_dict['custom_batch_details'].grid;
+    // ✅ Guard 1: fields_dict ready nahi hai
+    if (!frm.fields_dict || !frm.fields_dict['custom_batch_details']) return;
 
-    if (!grid) return;
+    let grid = frm.fields_dict['custom_batch_details'].grid;
+
+    // ✅ Guard 2: grid ya wrapper ready nahi hai
+    if (!grid || !grid.wrapper) return;
+
+    // ✅ Guard 3: doc ya rows ready nahi hain
+    if (!frm.doc || !frm.doc.custom_batch_details) return;
 
     grid.cannot_add_rows = true;
+    grid.cannot_delete_rows = true;
     grid.wrapper.find('.grid-add-row').hide();
+    grid.wrapper.find('.grid-remove-rows').hide();
+    grid.wrapper.find('.grid-remove-all-rows').hide();
 
     let $grid_wrapper = grid.wrapper;
 
@@ -1067,5 +1314,257 @@ function inject_eye_buttons_once(frm, $grid_wrapper) {
         });
 
         $bom_cell.append($btn);
+    });
+}
+
+function empty_state(icon, msg) {
+    return `<div style="padding:48px; text-align:center; color:#6b7280; border:2px dashed #d1fae5; border-radius:12px; background:#f0fdf4;"><div style="font-size:36px;">${icon}</div><div style="font-size:13px;">${msg}</div></div>`;
+}
+
+function render_bom_components_tab(frm) {
+    let $field = frm.fields_dict["bom_component_html"];
+    if (!$field) return;
+
+    frappe.call({
+        method: "custom_batch_planning.custom_batch_planning.doctype.batch_planning.batch_planning.get_consolidated_bom_components",
+        args: { doc_name: frm.doc.name },
+        callback: function (r) {
+            let items = r.message || [];
+            if (!items.length) {
+                $field.$wrapper.html(empty_state("📦", "No BOM components found."));
+                return;
+            }
+
+            let rows_html = items.map(function (item, i) {
+                let bg = i % 2 === 0 ? "#f9fafb" : "#ffffff";
+                return `
+                    <tr style="background:${bg}; border-bottom: 1px solid #e5e7eb;">
+                        <td style="padding:12px 16px; text-align:center; color:#6b7280; font-weight:600; font-size:13px;">${i + 1}</td>
+                        <td style="padding:12px 16px;">
+                            <span style="background:#16a34a; color:#fff; padding:3px 10px; border-radius:5px;
+                                font-size:11px; font-weight:700; letter-spacing:0.3px; white-space:nowrap;">
+                                ${item.item_code || ""}
+                            </span>
+                        </td>
+                        <td style="padding:12px 16px; color:#1f2937; font-size:13px; font-weight:500;">${item.item_name || ""}</td>
+                        <td style="padding:12px 16px; text-align:center; color:#4b5563; font-size:12px;
+                            font-family:monospace;">${item.uom || ""}</td>
+                        <td style="padding:12px 16px; text-align:center; font-weight:700; color:#15803d;
+                            font-size:13px;">${parseFloat(item.qty || 0).toFixed(4)}</td>
+                    </tr>`;
+            }).join("");
+
+            let html = `
+                <div style="width:100%; box-sizing:border-box; font-family:inherit; margin-top: 15px;">
+                    <div style="background:linear-gradient(135deg, #16a34a 0%, #14532d 100%);
+                        color:#fff; padding:16px 20px; border-radius:10px 10px 0 0;
+                        display:flex; flex-wrap:wrap; justify-content:space-between; align-items:center; gap:10px;">
+                        <div>
+                            <span style="font-size:16px; font-weight:700; letter-spacing:0.5px;">Consolidated BOM Components</span>
+                            <div style="font-size:11px; opacity:0.85; margin-top:2px;">Consolidated raw materials for all batches in this plan</div>
+                        </div>
+                        <div style="background:rgba(255,255,255,0.15); padding:4px 12px; border-radius:20px; font-size:12px; font-weight:600;">
+                            ${items.length} Unique Items
+                        </div>
+                    </div>
+                    <div style="border:1px solid #e5e7eb; border-top:none; border-radius:0 0 10px 10px; overflow:hidden; background:#fff;">
+                        <table style="width:100%; border-collapse:collapse; text-align:left;">
+                            <thead>
+                                <tr style="background:#f3f4f6; border-bottom:1px solid #e5e7eb;">
+                                    <th style="padding:12px 16px; text-align:center; color:#374151; font-weight:600; font-size:12px; text-transform:uppercase;">#</th>
+                                    <th style="padding:12px 16px; color:#374151; font-weight:600; font-size:12px; text-transform:uppercase;">Item Code</th>
+                                    <th style="padding:12px 16px; color:#374151; font-weight:600; font-size:12px; text-transform:uppercase;">Item Name</th>
+                                    <th style="padding:12px 16px; text-align:center; color:#374151; font-weight:600; font-size:12px; text-transform:uppercase;">UOM</th>
+                                    <th style="padding:12px 16px; text-align:center; color:#374151; font-weight:600; font-size:12px; text-transform:uppercase;">Total Qty</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                ${rows_html}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>`;
+            $field.$wrapper.html(html);
+        }
+    });
+}
+
+function render_material_planning_tab(frm) {
+    let $field = frm.fields_dict["material_planning_html"];
+    if (!$field) return;
+
+    $field.$wrapper.html(`
+        <div style="padding:48px; text-align:center; color:#6b7280;">
+            <div style="width:36px; height:36px; border:3px solid #d1fae5; border-top-color:#16a34a; border-radius:50%; animation:mp-spin-bp 0.8s linear infinite; margin:0 auto 14px;"></div>
+            <style>@keyframes mp-spin-bp { to { transform:rotate(360deg); } }</style>
+            <div style="font-size:13px; color:#4b5563;">Fetching consolidated material planning data...</div>
+        </div>
+    `);
+
+    frappe.call({
+        method: "custom_batch_planning.custom_batch_planning.doctype.batch_planning.batch_planning.get_material_planning_data",
+        args: { doc_name: frm.doc.name },
+        callback: function (r) {
+            if (!r.message) {
+                $field.$wrapper.html(empty_state("❌", "Could not fetch material planning data."));
+                return;
+            }
+
+            let warehouse = r.message.warehouse;
+            let data = r.message.results || [];
+            frm._mp_data = data;
+
+            if (!data.length) {
+                $field.$wrapper.html(empty_state("📦", "No items to display for material planning."));
+                return;
+            }
+
+            let th_style = function (align = "center") {
+                return `padding:11px 10px; text-align:${align}; color:#166534; font-weight:700; font-size:10px; text-transform:uppercase; white-space:nowrap; border-bottom:2px solid #86efac;`;
+            };
+
+            let format_qty_val = function (val) {
+                if (val === null || val === undefined || val === "") return "-";
+                let num = parseFloat(val);
+                if (isNaN(num)) return "-";
+                return num % 1 === 0 ? num.toString() : num.toFixed(2);
+            };
+
+            let rows_html = data.map((row, i) => {
+                let bg = i % 2 === 0 ? "#f9fafb" : "#ffffff";
+                return `
+                    <tr style="background:${bg}; border-bottom: 1px solid #e5e7eb;">
+                        <td style="padding:9px 10px; text-align:center; color:#9ca3af; font-size:12px; font-weight:600;">${i + 1}</td>
+                        <td style="padding:9px 10px;"><span style="background:#16a34a; color:#fff; padding:2px 8px; border-radius:4px; font-size:10px; font-weight:700; white-space:nowrap;">${row.item_code}</span></td>
+                        <td style="padding:9px 10px; color:#1f2937; font-size:12px; font-weight:500;">${row.item_name || ""}</td>
+                        <td style="padding:9px 10px; text-align:center; color:#4b5563; font-size:12px; font-family:monospace;">${row.uom || ""}</td>
+                        <td style="padding:9px 10px; text-align:center; font-weight:700; color:#d97706; font-size:12px;">${format_qty_val(row.qty_required)}</td>
+                        <td style="padding:9px 10px; text-align:center; font-weight:700; color:#15803d; font-size:12px;">${format_qty_val(row.total_stock)}</td>
+                        <td style="padding:9px 10px; text-align:center; font-weight:700; color:#1d4ed8; font-size:12px;">${format_qty_val(row.main_stock)}</td>
+                        <td style="padding:9px 10px; text-align:center; font-weight:700; color:#d97706; font-size:12px;">${format_qty_val(row.allocated_qty)}</td>
+                        <td style="padding:9px 10px; text-align:center; font-weight:700; font-size:12px; color:${parseFloat(row.free_stock || 0) > 0 ? "#15803d" : "#dc2626"};">${format_qty_val(row.free_stock)}</td>
+                        <td style="padding:9px 10px; text-align:center; font-weight:700; color:#7c3aed; font-size:12px;">${format_qty_val(row.lab_stock)}</td>
+                        ${parseFloat(row.qty_required || 0) <= 0 ? `
+                            <td style="padding:9px 10px; text-align:center; font-weight:700; color:#9ca3af;">-</td>
+                        ` : row.mr_count > 0 ? `
+                            <td style="padding:9px 10px; text-align:center; font-weight:700; color:#1d4ed8; cursor:pointer;"
+                                onclick="frappe.set_route('List', 'Material Request', {name: ['in', ${JSON.stringify(row.open_mr_list).replace(/"/g, "'")}], docstatus: 1, status: ['in', ['Pending', 'Partially Ordered', 'Ordered']]})">
+                                ${format_qty_val(row.mr_total_qty)} (${row.mr_count})
+                            </td>
+                        ` : `
+                            <td style="padding:9px 10px; text-align:center; font-weight:700; color:#4b5563;">
+                                0
+                            </td>
+                        `}
+                        ${parseFloat(row.qty_required || 0) <= 0 ? `
+                            <td style="padding:9px 10px; text-align:center; font-weight:700; color:#9ca3af;">-</td>
+                        ` : row.po_count > 0 ? `
+                            <td style="padding:9px 10px; text-align:center; font-weight:700; color:#1d4ed8; cursor:pointer;"
+                                onclick="frappe.set_route('List', 'Purchase Order', {name: ['in', ${JSON.stringify(row.open_po_list).replace(/"/g, "'")}], docstatus: 1, status: ['in', ['To Receive and Bill', 'To Receive', 'Partially Received']]})">
+                                ${format_qty_val(row.po_pending_qty)} (${row.po_count})
+                            </td>
+                        ` : `
+                            <td style="padding:9px 10px; text-align:center; font-weight:700; color:#4b5563;">
+                                0
+                            </td>
+                        `}
+                        ${parseFloat(row.qty_required || 0) <= 0 ? `
+                            <td style="padding:9px 10px; text-align:center; font-weight:700; color:#9ca3af;">-</td>
+                        ` : row.pr_count > 0 ? `
+                            <td style="padding:9px 10px; text-align:center; font-weight:700; color:#1d4ed8; cursor:pointer;"
+                                onclick="frappe.set_route('List', 'Purchase Receipt', {name: ['in', ${JSON.stringify(row.open_pr_list).replace(/"/g, "'")}], docstatus: 1, status: ['in', ['To Bill', 'Return Issued']]})">
+                                ${format_qty_val(row.pr_total_qty)} (${row.pr_count})
+                            </td>
+                        ` : `
+                            <td style="padding:9px 10px; text-align:center; font-weight:700; color:#4b5563;">
+                                0
+                            </td>
+                        `}
+                        <td style="padding:9px 10px; text-align:center; font-weight:700; font-size:12px; color:${parseFloat(row.net_requirement || 0) > 0 ? "#dc2626" : "#15803d"};">${format_qty_val(row.net_requirement)}</td>
+                        <td style="padding:9px 10px; text-align:center; font-weight:700; color:#15803d; font-size:12px;">${format_qty_val(row.usable_qty)}</td>
+                        <td style="padding:9px 10px; text-align:center; font-weight:700; color:#dc2626; font-size:12px;">${format_qty_val(row.expired_qty)}</td>
+                    </tr>`;
+            }).join("");
+
+            let html = `
+                <div id="mp-table-container-bp" style="width:100%; font-family:inherit; margin-top: 15px;">
+                    <div style="background:linear-gradient(135deg, #16a34a 0%, #14532d 100%); color:#fff; padding:16px 20px; border-radius:10px 10px 0 0; display:flex; justify-content:space-between; align-items:center;">
+                        <div>
+                            <div style="font-size:15px; font-weight:700;">🏭 Consolidated Material Planning — Stock vs Requirement</div>
+                            <div style="font-size:12px; opacity:0.85; margin-top:2px;">Warehouse: <b>${warehouse}</b></div>
+                        </div>
+                        <div style="background:rgba(255,255,255,0.15); padding:4px 12px; border-radius:20px; font-size:12px; font-weight:600;">
+                            ${data.length} Items
+                        </div>
+                    </div>
+                    <div style="overflow-x:auto; border:1px solid #d1fae5; border-top:none; border-radius:0 0 10px 10px; background:#fff;">
+                        <table style="width:100%; border-collapse:collapse; min-width:1350px; text-align:left;">
+                            <thead>
+                                <tr style="background:#f3f4f6;">
+                                    <th style="${th_style()}">#</th>
+                                    <th style="${th_style("left")}">Item Code</th>
+                                    <th style="${th_style("left")}">Item Name</th>
+                                    <th style="${th_style()}">UOM</th>
+                                    <th style="${th_style()}">Qty Req</th>
+                                    <th style="${th_style()}">Total Stock</th>
+                                    <th style="${th_style()}">Main Wh</th>
+                                    <th style="${th_style()}">Allocated</th>
+                                    <th style="${th_style()}">Free Qty</th>
+                                    <th style="${th_style()}">Lab Wise</th>
+                                    <th style="${th_style()}">Open MR</th>
+                                    <th style="${th_style()}">Open PO</th>
+                                    <th style="${th_style()}">Open PR</th>
+                                    <th style="${th_style()}">Net Req</th>
+                                    <th style="${th_style()}">Usable</th>
+                                    <th style="${th_style()}">Expired Qty</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                ${rows_html}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>`;
+            $field.$wrapper.html(html);
+        }
+    });
+}
+
+function render_material_planning_placeholder(frm) {
+    let $field = frm.fields_dict["material_planning_html"];
+    if (!$field) return;
+
+    $field.$wrapper.html(`
+        <div style="padding:48px; text-align:center; color:#6b7280; border:2px dashed #d1fae5; border-radius:12px; margin:4px 0; background:#f0fdf4;">
+            <div style="font-size:36px; margin-bottom:12px;">🏭</div>
+            <div style="font-size:15px; font-weight:700; color:#166534; margin-bottom:6px;">Material Planning</div>
+            <div style="font-size:13px; color:#4b5563;">Click <b style="color:#16a34a;">Run Material Planning</b> above to load stock data.</div>
+        </div>
+    `);
+}
+
+function set_project_filter(frm) {
+    if (!frm.doc.custom_employee_function) {
+        frm.set_query('project', function () {
+            return {
+                filters: [['name', '=', '']]
+            };
+        });
+        return;
+    }
+
+    frappe.call({
+        method: 'custom_batch_planning.custom_batch_planning.doctype.slot_master_list.slot_master_list.get_employee_function_projects',
+        args: {
+            employee_function: frm.doc.custom_employee_function
+        },
+        callback: function (r) {
+            let projects = r.message || [];
+            frm.set_query('project', function () {
+                return {
+                    filters: [['name', 'in', projects.length ? projects : ['']]]
+                };
+            });
+        }
     });
 }

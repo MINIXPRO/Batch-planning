@@ -11,14 +11,16 @@
 
 frappe.ui.form.on("Slot Opening", {
 	onload: function (frm) {
-		if (frm.is_new() && frm.doc.slot_master) {
+		if (frm.is_new() && frm.doc.slot_master && frm.doc.employee_function) {
 			frm.trigger('slot_master');
 		}
+		set_slot_master_filter(frm);
+		set_project_filter(frm);
 	},
 
 	// ── Fires on every form load / save / refresh ──
 	refresh: function (frm) {
-		frm.page.clear_custom_actions();
+		frm.clear_custom_buttons();
 
 		// Always show total_batch_remained field
 		frm.set_df_property("total_batch_remained", "hidden", 0);
@@ -84,83 +86,47 @@ frappe.ui.form.on("Slot Opening", {
 		// ── Custom Button: Create Batch ──
 		// Only shown for saved (non-new) documents
 		// Pre-fills the new Batch Creation doc with data from this Slot Opening
-		let today = frappe.datetime.nowdate();
-		if (!frm.is_new() && frm.doc.batch_end_date && frm.doc.batch_end_date >= today && frm.doc.slot_master) {
+		if (!frm.is_new() && frm.doc.slot_master) {
 			frappe.call({
 				method: 'custom_batch_planning.custom_batch_planning.doctype.slot_opening.slot_opening.get_sct_details',
 				args: { slot_master: frm.doc.slot_master },
 				callback: function (sct_r) {
-					let has_remaining = (sct_r.message || []).some(function (d) {
-						return parseInt(d.capacity_booked || 0) > parseInt(d.batches_planned || 0);
+					let sct_map = {};
+					(sct_r.message || []).forEach(function (d) {
+						sct_map[d.date] = parseInt(d.batches_planned) || 0;
+					});
+
+					let has_remaining = (frm.doc.slot_booking || []).some(function (row) {
+						let booked = parseInt(row.booked_slots) || 0;
+						let planned = sct_map[row.slot_booking_date] || 0;
+						return booked > planned;
 					});
 
 					if (!has_remaining) return;
 
 					frm.add_custom_button(__("➕ Create Batch"), function () {
+						console.log("Hello world  11")
 						if (frm.is_dirty()) {
 							frappe.msgprint(__("Please save the document before creating a Batch."));
 							return;
 						}
 
-						frappe
-							.new_doc("Batch Creation", {
-								slot_opening: frm.doc.name,
-								custom_employee_function: frm.doc.employee_function,
-								custom_project_id: frm.doc.custom_project,
-								custom_project_name: frm.doc.custom_project_name,
-								custom_function_head_name: frm.doc.function_head_name,
-								month: frm.doc.batch_start_date
-									? new Date(frm.doc.batch_start_date).toLocaleString("en-US", {
-										month: "long",
-									})
-									: "",
-								custom_total_batches_planned: frm.doc.total_batches_planned,
-							})
-							.then(() => {
-								if (!cur_frm) return;
-
-								cur_frm.clear_table("slot_opening_table");
-								frappe.call({
-									method: 'custom_batch_planning.custom_batch_planning.doctype.slot_opening.slot_opening.get_sct_details',
-									args: { slot_master: frm.doc.slot_master },
-									callback: function (sct_r) {
-										let sct_map = {};
-										(sct_r.message || []).forEach(function (d) {
-											sct_map[d.date] = parseInt(d.batches_planned) || 0;
-										});
-
-										// ── slot_opening_table fill karo ──
-										(frm.doc.slot_booking || []).forEach(function (row) {
-											let nr = cur_frm.add_child("slot_opening_table");
-											nr.slot_booking_date = row.slot_booking_date;
-											nr.how_many_slots_per_day = row.how_many_slots_per_day;
-											nr.total_slots = row.total_slots;
-											nr.booked_slots = row.booked_slots;
-											nr.availabe_capacity = row.availabe_capacity;
-											nr.reason = row.reason;
-										});
-										cur_frm.refresh_field("slot_opening_table");
-
-										// ── custom_batch_details fill karo ──
-										cur_frm.clear_table("custom_batch_details");
-										(frm.doc.slot_booking || []).forEach(function (row) {
-											let booked = parseInt(row.booked_slots) || 0;
-											let planned = sct_map[row.slot_booking_date] || 0;
-											let remaining = booked - planned;
-
-											if (remaining <= 0) return;
-
-											for (let i = 0; i < remaining; i++) {
-												let child = cur_frm.add_child("custom_batch_details");
-												child.slot_booking_date = row.slot_booking_date;
-												child.slot_opening_id = frm.doc.name;
-												child.reason = row.reason;
-											}
-										});
-										cur_frm.refresh_field("custom_batch_details");
-									}
-								});
-							});
+						frappe.new_doc("Batch Planning", {
+							slot_opening: frm.doc.name,
+							custom_employee_function: frm.doc.employee_function,
+							custom_function_head_name: frm.doc.function_head_name,
+							custom_slot_master: frm.doc.slot_master,
+							project: frm.doc.project,
+							month: frm.doc.batch_start_date
+								? new Date(frm.doc.batch_start_date).toLocaleString("en-US", {
+									month: "long",
+								})
+								: "",
+							custom_total_batches_planned: frm.doc.total_batches_planned,
+						});
+						console.log("Hello world 2")
+						console.log("1-->", frm.doc.employee_function);
+						console.log("2-->", frm.doc.slot_master);
 					});
 				}
 			});
@@ -192,9 +158,10 @@ frappe.ui.form.on("Slot Opening", {
 
 	// ── After Save: redirect to the auto-named doc if name changed ──
 	after_save: function (frm) {
-		if (frm.doc.name.startsWith("SB-")) {
-			frappe.set_route("Form", "Slot Opening", frm.doc.name);
-			return;
+		if (frm.doc.name.startsWith("SO-")) {
+			if (frm.doc.__islocal || frm._was_new) {
+				frappe.set_route("Form", "Slot Opening", frm.doc.name);
+			}
 		}
 		// Name may not be updated in the form object yet — fetch from DB by creation timestamp
 		frappe.db
@@ -204,7 +171,7 @@ frappe.ui.form.on("Slot Opening", {
 				limit: 1,
 			})
 			.then(function (r) {
-				if (r && r.length && r[0].name.startsWith("SB-")) {
+				if (r && r.length && r[0].name.startsWith("SO-")) {
 					window.location.href = `/app/slot-opening/${r[0].name}`;
 				}
 			});
@@ -214,16 +181,22 @@ frappe.ui.form.on("Slot Opening", {
 	// Clear all dependent fields and re-render calendar with new context
 	employee_function: function (frm) {
 		frm.set_value("slot_master", "");
+		frm.set_value("project", "");
 		frm.set_value("total_batch_capacity", "");
 		frm.set_value("total_batch_remained", "");
 		frm.set_value("batch_start_date", "");
 		frm.set_value("batch_end_date", "");
-		frm.set_value("custom_project", "");
-		frm.set_value("custom_project_name", "");
 		frm.doc.__batch_end_date = null;
 		frm.doc.__batch_start_date = null;
 		frm.doc.__batch_capacity = null;
 		set_slot_master_filter(frm);
+		set_project_filter(frm);
+		loadSlotOpeningCalendar(frm);
+	},
+
+	// ── Project changed ──
+	// Re-render calendar with new project context
+	project: function (frm) {
 		loadSlotOpeningCalendar(frm);
 	},
 
@@ -251,8 +224,6 @@ frappe.ui.form.on("Slot Opening", {
 			frm.set_value("total_batch_remained", "");
 			frm.set_value("batch_start_date", "");
 			frm.set_value("batch_end_date", "");
-			frm.set_value("custom_project", "");
-			frm.set_value("custom_project_name", "");
 			frm.doc.__batch_end_date = null;
 			frm.doc.__batch_start_date = null;
 			frm.doc.__batch_capacity = null;
@@ -263,7 +234,7 @@ frappe.ui.form.on("Slot Opening", {
 		frappe.db.get_value(
 			"Slot Master List",
 			frm.doc.slot_master,
-			["batch_capacity", "batch_end_date", "batch_start_date", "custom_project"],
+			["batch_capacity", "batch_end_date", "batch_start_date", "project"],
 			function (data) {
 				if (!data) return;
 
@@ -287,31 +258,9 @@ frappe.ui.form.on("Slot Opening", {
 				// Populate batch date fields
 				frm.set_value("batch_start_date", data.batch_start_date);
 				frm.set_value("batch_end_date", data.batch_end_date);
-				frm.set_value("custom_project", data.custom_project);
+				frm.set_value("project", data.project);
 
-				if (data.custom_project) {
-					// Fetch project name then load calendar AFTER it is confirmed set
-					// ⚠️ Calendar must be called here — not outside — so custom_project
-					//    is guaranteed to be on frm.doc before the SCT filter runs
-					frappe.db.get_value(
-						"Project",
-						data.custom_project,
-						"project_name",
-						function (p_data) {
-							if (p_data && p_data.project_name) {
-								frm.set_value("custom_project_name", p_data.project_name);
-							} else {
-								frm.set_value("custom_project_name", "");
-							}
-							// ✅ Project is now set — safe to render calendar
-							loadSlotOpeningCalendar(frm);
-						},
-					);
-				} else {
-					frm.set_value("custom_project_name", "");
-					// No project linked — calendar will show "No Project Linked" state
-					loadSlotOpeningCalendar(frm);
-				}
+				loadSlotOpeningCalendar(frm);
 
 				// Calculate total capacity from date range × daily capacity
 				let total_capacity = calculate_total_capacity(
@@ -335,6 +284,17 @@ frappe.ui.form.on("Slot Opening", {
 						let available_dates = r.message.sort((a, b) => (a.date > b.date ? 1 : -1));
 						if (!available_dates.length) return;
 
+						let total_available = available_dates.reduce((sum, d) => sum + (parseInt(d.capacity_available) || 0), 0);
+						if (total_available <= 0) {
+							frappe.msgprint({
+								title: __("Capacity Full"),
+								message: __("The selected Slot Master has no remaining capacity."),
+								indicator: "red"
+							});
+							frm.set_value("slot_master", "");
+							return;
+						}
+
 						// Clear existing rows and re-populate
 						frm.doc.slot_booking = [];
 						frm.refresh_field("slot_booking");
@@ -344,6 +304,7 @@ frappe.ui.form.on("Slot Opening", {
 							let row = frm.add_child("slot_booking");
 							row.slot_booking_date = d.date;
 							row.batch_capacity = data.batch_capacity;
+							row.total_slots = parseInt(data.batch_capacity) || 0;
 							row.availabe_capacity = parseInt(d.capacity_available) || 0;
 							row.__sct_available = d.capacity_available; // runtime cache for validation
 							if (parseInt(d.capacity_available) === 0) {
@@ -371,6 +332,19 @@ frappe.ui.form.on("Slot Opening", {
 				`⚠️ Total Batches Planned (${total_planned}) exceeds Total Batch Capacity (${capacity})!`,
 			);
 		}
+
+		// Positive integer validation for child table Planning Capacity (booked_slots)
+		(frm.doc.slot_booking || []).forEach(function (row) {
+			let val = row.booked_slots;
+			if (val === undefined || val === null || val === "" || !Number.isInteger(Number(val)) || parseInt(val, 10) <= 0) {
+				frappe.throw(`⚠️ Row #${row.idx}: Planning Capacity must be a positive integer greater than zero.`);
+			}
+			// Normalize leading zeros
+			let intVal = parseInt(val, 10);
+			if (intVal != val) {
+				frappe.model.set_value(row.doctype, row.name, "booked_slots", intVal);
+			}
+		});
 	},
 });
 
@@ -450,6 +424,7 @@ frappe.ui.form.on("Slot Booking CT", {
 
 				// Cache SCT available count on the row for later validation
 				row.__sct_available = available;
+				row.total_slots = parseInt(frm.doc.__batch_capacity) || parseInt(detail.total_capacity) || 0;
 				row.availabe_capacity = available;
 				row.__sct_detail_name = detail.name;
 				frm.refresh_field("slot_booking");
@@ -463,14 +438,21 @@ frappe.ui.form.on("Slot Booking CT", {
 		});
 	},
 
-	// Recalculate booked_slots when how_many_slots_per_day changes
-	how_many_slots_per_day: function (frm, cdt, cdn) {
-		calculate_total(frm, cdt, cdn);
-	},
-
-	// Recalculate booked_slots when total_slots changes
-	total_slots: function (frm, cdt, cdn) {
-		calculate_total(frm, cdt, cdn);
+	booked_slots: function (frm, cdt, cdn) {
+		let row = locals[cdt][cdn];
+		let available = parseInt(row.availabe_capacity) || 0;
+		let booked = parseInt(row.booked_slots) || 0;
+		if (booked > available) {
+			frappe.msgprint(__("⚠️ Planning Capacity cannot exceed Available Capacity ({0})!", [available]));
+			frappe.model.set_value(cdt, cdn, "booked_slots", 0);
+			return;
+		}
+		if (row.total_slots && row.booked_slots && parseInt(row.total_slots) === parseInt(row.booked_slots)) {
+			frappe.model.set_value(cdt, cdn, "reason", "N/A");
+		} else if (row.reason === "N/A") {
+			frappe.model.set_value(cdt, cdn, "reason", "");
+		}
+		calculate_totals(frm);
 	},
 
 	// Recalculate grand totals when a row is removed
@@ -505,83 +487,27 @@ function calculate_total_capacity(start_date, end_date, batch_capacity) {
  *   - Matching selected employee_function (if set)
  */
 function set_slot_master_filter(frm) {
+	console.log("set_slot_master_filter called, ef:", frm.doc.employee_function);
 	frm.set_query("slot_master", function () {
-		let filters = {
-			docstatus: 1,
-			workflow_state: "Approved",
-			batch_end_date: [">=", frappe.datetime.nowdate()],
+		console.log("get_query fired, ef:", frm.doc.employee_function);
+		return {
+			query: "custom_batch_planning.custom_batch_planning.doctype.slot_opening.slot_opening.get_active_slot_masters",
+			filters: {
+				employee_function: frm.doc.employee_function || ""
+			}
 		};
-		if (frm.doc.employee_function) {
-			filters["employee_function"] = frm.doc.employee_function;
-		}
-		return { filters: filters };
 	});
-}
-
-/**
- * Recalculate booked_slots for a single child row.
- * booked_slots = how_many_slots_per_day × total_slots
- * Enforces SCT per-date capacity and total batch capacity limits.
- */
-function calculate_total(frm, cdt, cdn) {
-	let row = locals[cdt][cdn];
-	let new_booked =
-		(parseInt(row.how_many_slots_per_day) || 0) * (parseInt(row.total_slots) || 0);
-
-	// Sum booked slots from all OTHER rows (excluding current)
-	let other_batches = (frm.doc.slot_booking || []).reduce(function (sum, r) {
-		if (r.name === row.name) return sum;
-		return sum + (parseInt(r.booked_slots) || 0);
-	}, 0);
-
-	let capacity = parseInt(frm.doc.total_batch_capacity) || 0;
-
-	// Check against SCT available slots for this specific date
-	if (row.__sct_available !== undefined) {
-		if (new_booked > row.__sct_available) {
-			frappe.msgprint({
-				title: "⚠️ SCT Capacity Exceeded",
-				message: `Only <b>${row.__sct_available}</b> slot(s) available for this date in SCT.<br>
-                          You are trying to book <b>${new_booked}</b>.`,
-				indicator: "orange",
-			});
-			frappe.model.set_value(cdt, cdn, "how_many_slots_per_day", 0);
-			frappe.model.set_value(cdt, cdn, "total_slots", 0);
-			frappe.model.set_value(cdt, cdn, "booked_slots", 0);
-			calculate_totals(frm);
-			return;
-		}
-	}
-
-	// Check against overall batch capacity
-	if (capacity > 0 && other_batches + new_booked > capacity) {
-		frappe.msgprint(
-			`⚠️ Total Batch Capacity exceeded! Max: ${capacity}, Already planned: ${other_batches}`,
-		);
-		frappe.model.set_value(cdt, cdn, "how_many_slots_per_day", 0);
-		frappe.model.set_value(cdt, cdn, "total_slots", 0);
-		frappe.model.set_value(cdt, cdn, "booked_slots", 0);
-		calculate_totals(frm);
-		return;
-	}
-
-	// All checks passed — set booked_slots
-	frappe.model.set_value(cdt, cdn, "booked_slots", new_booked);
-	calculate_totals(frm);
 }
 
 /**
  * Recalculate form-level totals from all child rows.
- * Updates: total_slots_planned, total_batches_planned, total_batch_remained
+ * Updates: total_batches_planned, total_batch_remained
  */
 function calculate_totals(frm) {
-	let total_slots = 0,
-		total_batches = 0;
+	let total_batches = 0;
 	(frm.doc.slot_booking || []).forEach(function (row) {
-		total_slots += parseInt(row.how_many_slots_per_day) || 0;
 		total_batches += parseInt(row.booked_slots) || 0;
 	});
-	frm.set_value("total_slots_planned", total_slots);
 	frm.set_value("total_batches_planned", total_batches);
 	fetch_sct_remaining(frm);
 }
@@ -625,10 +551,10 @@ function fetch_sct_remaining(frm) {
  * Called on: refresh, employee_function change, slot_master change
  *
  * Flow:
- *   1. Guard checks: needs employee_function + custom_project
+ *   1. Guard checks: needs employee_function
  *   2. Injects styles (once per page load)
  *   3. Shows loading spinner
- *   4. Fetches SCT parent records filtered by employee_function + project
+ *   4. Fetches SCT parent records filtered by employee_function
  *   5. Fetches all Slot Capacity Detail child rows in one bulk call
  *   6. Aggregates by date → passes to _renderCalendar()
  */
@@ -645,21 +571,6 @@ function loadSlotOpeningCalendar(frm) {
                 <div class="so-cal-empty-title">Calendar Unavailable</div>
                 <div class="so-cal-empty-sub">
                     Select an <strong>Employee Function</strong> to view the slot calendar.
-                </div>
-            </div>
-        `);
-		_injectCalendarBaseStyles();
-		return;
-	}
-
-	// Guard: Project not linked yet (set by Slot Master selection)
-	if (!frm.doc.custom_project) {
-		wrapper.html(`
-            <div class="so-cal-empty">
-                <div class="so-cal-empty-icon">📋</div>
-                <div class="so-cal-empty-title">No Project Linked</div>
-                <div class="so-cal-empty-sub">
-                    Select a <strong>Slot Master</strong> to load the project and calendar.
                 </div>
             </div>
         `);
@@ -684,7 +595,7 @@ function loadSlotOpeningCalendar(frm) {
 		method: "custom_batch_planning.custom_batch_planning.doctype.slot_opening.slot_opening.get_calendar_data",
 		args: {
 			employee_function: frm.doc.employee_function,
-			project: frm.doc.custom_project,
+			project: frm.doc.project || ""
 		},
 		callback: function (r) {
 			const rows = r.message || [];
@@ -696,8 +607,7 @@ function loadSlotOpeningCalendar(frm) {
                     <div class="so-cal-empty-title">No SCT Records Found</div>
                     <div class="so-cal-empty-sub">
                         No Slot Capacity Tracker found for<br>
-                        <strong>${frm.doc.employee_function}</strong> &nbsp;→&nbsp;
-                        <strong>${frm.doc.custom_project_name || frm.doc.custom_project}</strong>
+                        <strong>${frm.doc.employee_function}</strong>
                     </div>
                 </div>
             `);
@@ -718,7 +628,7 @@ function loadSlotOpeningCalendar(frm) {
 					sct_name: row.sct_name,
 					slot_master: row.slot_master || "-",
 					employee_headname: row.employee_headname || "-",
-					project_name: row.project_name || "-",
+					project: row.project || "-",
 					total: parseInt(row.total_capacity) || 0,
 					booked: parseInt(row.capacity_booked) || 0,
 					available: parseInt(row.capacity_available) || 0,
@@ -742,8 +652,6 @@ function _renderCalendar(frm, wrapper, byDate) {
 	const FC_CSS = "https://cdn.jsdelivr.net/npm/fullcalendar@6.1.9/index.global.min.css";
 	const FC_JS = "https://cdn.jsdelivr.net/npm/fullcalendar@6.1.9/index.global.min.js";
 
-	const projectLabel = frm.doc.custom_project_name || frm.doc.custom_project || "";
-
 	// Render the shell — calendar mounts into #so-fc-mount
 	wrapper.html(`
         <div class="so-cal-shell">
@@ -755,7 +663,7 @@ function _renderCalendar(frm, wrapper, byDate) {
                     <div>
                         <div class="so-cal-title">Slot Availability Calendar</div>
                         <div class="so-cal-subtitle">
-                            ${frm.doc.employee_function} &nbsp;·&nbsp; ${projectLabel}
+                            ${frm.doc.employee_function}
                         </div>
                     </div>
                 </div>
@@ -780,7 +688,7 @@ function _renderCalendar(frm, wrapper, byDate) {
         </div>
     `);
 
-	const _init = () => _mountFC(byDate);
+	const _init = () => _mountFC(frm, byDate);
 
 	// Load CSS (unchanged)
 	if (!document.querySelector(`link[href="${FC_CSS}"]`)) {
@@ -815,7 +723,7 @@ function _renderCalendar(frm, wrapper, byDate) {
  *
  * @param {Object} byDate - Aggregated slot data keyed by YYYY-MM-DD
  */
-function _mountFC(byDate) {
+function _mountFC(frm, byDate) {
 	const el = document.getElementById("so-fc-mount");
 	if (!el) return;
 
@@ -854,6 +762,7 @@ function _mountFC(byDate) {
 
 			// Build the pill badge
 			const pill = document.createElement("div");
+			pill.style.pointerEvents = "none"; // Ensure clicks pass through
 			pill.className = "so-cal-pill";
 
 			if (data.available === 0) {
@@ -925,40 +834,56 @@ function _mountFC(byDate) {
 				)
 				.join("");
 
-			frappe.msgprint({
-				title: `📅 ${_humanDate(dateStr)}`,
-				message: `
-                    <!-- Summary bar -->
-                    <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:14px;">
-                        <span style="background:${statusColor};color:#fff;font-size:11px;
-                            font-weight:800;padding:3px 12px;border-radius:20px;letter-spacing:1px;">
-                            ${statusLabel}
-                        </span>
-                        <span style="font-size:14px;color:#334155;">
-                            <strong>${data.total}</strong> total &nbsp;·&nbsp;
-                            <strong style="color:#ef4444;">${data.booked}</strong> booked &nbsp;·&nbsp;
-                            <strong style="color:#22c55e;">${data.available}</strong> available
-                        </span>
-                    </div>
-                    <!-- Per-SCT breakdown table -->
-                    <div style="overflow-x:auto;">
-                        <table class="table table-bordered" style="width:100%;font-size:13px;margin:0;">
-                            <thead style="background:#f1f5f9;">
-                                <tr>
-                                    <th>Slot Master</th>
-                                    <th>Head Name</th>
-                                    <th style="text-align:center;">Total</th>
-                                    <th style="text-align:center;">Booked</th>
-                                    <th style="text-align:center;">Available</th>
-                                </tr>
-                            </thead>
-                            <tbody>${rows}</tbody>
-                        </table>
-                    </div>
-                `,
-				wide: true,
-				indicator: data.available === 0 ? "red" : data.booked > 0 ? "orange" : "green",
-			});
+			let project_code = frm.doc.project;
+			if (project_code) {
+				frappe.db.get_value("Project", project_code, "project_name", function (r) {
+					let project_full_name = (r && r.project_name) ? r.project_name : project_code;
+					render_popup(project_full_name);
+				});
+			} else {
+				render_popup("All Projects");
+			}
+
+			function render_popup(project_full_name) {
+				frappe.msgprint({
+					title: `📅 ${_humanDate(dateStr)}`,
+					message: `
+						<!-- Project Info -->
+						<div style="font-size:14px;font-weight:600;color:#334155;margin-bottom:8px;">
+							Project: <span style="color:#0f172a;font-weight:700;">${project_full_name}</span>
+						</div>
+						<!-- Summary bar -->
+						<div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:14px;">
+							<span style="background:${statusColor};color:#fff;font-size:11px;
+								font-weight:800;padding:3px 12px;border-radius:20px;letter-spacing:1px;">
+								${statusLabel}
+							</span>
+							<span style="font-size:14px;color:#334155;">
+								<strong>${data.total}</strong> total &nbsp;·&nbsp;
+								<strong style="color:#ef4444;">${data.booked}</strong> booked &nbsp;·&nbsp;
+								<strong style="color:#22c55e;">${data.available}</strong> available
+							</span>
+						</div>
+						<!-- Per-SCT breakdown table -->
+						<div style="overflow-x:auto;">
+							<table class="table table-bordered" style="width:100%;font-size:13px;margin:0;">
+								<thead style="background:#f1f5f9;">
+									<tr>
+										<th>Slot Master</th>
+										<th>Head Name</th>
+										<th style="text-align:center;">Total</th>
+										<th style="text-align:center;">Booked</th>
+										<th style="text-align:center;">Available</th>
+									</tr>
+								</thead>
+								<tbody>${rows}</tbody>
+							</table>
+						</div>
+					`,
+					wide: true,
+					indicator: data.available === 0 ? "red" : data.booked > 0 ? "orange" : "green",
+				});
+			}
 		},
 	});
 
@@ -1330,3 +1255,32 @@ function _injectCalendarBaseStyles() {
     `;
 	document.head.appendChild(s);
 }
+
+function set_project_filter(frm) {
+	if (!frm.doc.employee_function) {
+		frm.set_query('project', function () {
+			return {
+				filters: [['name', '=', '']]
+			};
+		});
+		return;
+	}
+
+	frappe.call({
+		method: 'custom_batch_planning.custom_batch_planning.doctype.slot_master_list.slot_master_list.get_employee_function_projects',
+		args: {
+			employee_function: frm.doc.employee_function
+		},
+		callback: function (r) {
+			let projects = r.message || [];
+			frm.set_query('project', function () {
+				return {
+					filters: [['name', 'in', projects.length ? projects : ['']]]
+				};
+			});
+		}
+	});
+}
+
+
+

@@ -7,7 +7,10 @@ frappe.ui.form.on('Material Request', {
         localStorage.removeItem('mr_prefill');
 
         frm.set_value('material_request_type', 'Purchase');
-        frm.set_value('custom_batch_no', data.batch_nos);
+        if (data.batch_nos) {
+            let bp_no = data.batch_nos.indexOf(',') === -1 ? data.batch_nos.trim() : data.batch_nos.split(',')[0].trim();
+            frm.set_value('custom_batch_planning_no', bp_no);
+        }
         frm.set_value('custom_employee_function', data.employee_function);
         frm.clear_table('items');
 

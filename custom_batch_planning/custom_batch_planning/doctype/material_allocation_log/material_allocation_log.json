@@ -27,7 +27,7 @@
    "fieldname": "batch_planning",
    "fieldtype": "Link",
    "label": "Batch Planning",
-   "options": "Batches Planned"
+   "options": "Batch Planning"
   },
   {
    "fieldname": "project_id",

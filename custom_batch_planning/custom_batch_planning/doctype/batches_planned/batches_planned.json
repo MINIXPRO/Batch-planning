@@ -16,14 +16,14 @@
   "finished_item",
   "slot_booking_date",
   "amended_from",
-  "batch_creation",
+  "batch_planning",
   "bom_components_tab",
   "bom_items_list_section",
   "bom_items",
-  "materials_planning_tab",
-  "material_planning",
   "stock_entry_tab",
   "stock_entry_details",
+  "item_issue_tab",
+  "item_issue_details",
   "project",
   "project_name"
  ],
@@ -102,10 +102,10 @@
    "read_only": 1
   },
   {
-   "fieldname": "batch_creation",
+   "fieldname": "batch_planning",
    "fieldtype": "Link",
-   "label": "Batch Creation",
-   "options": "Batch Creation",
+   "label": "Batch Planning",
+   "options": "Batch Planning",
    "read_only": 1
   },
   {
@@ -124,16 +124,6 @@
    "label": "BOM Items"
   },
   {
-   "fieldname": "materials_planning_tab",
-   "fieldtype": "Tab Break",
-   "label": "Materials Planning"
-  },
-  {
-   "fieldname": "material_planning",
-   "fieldtype": "HTML",
-   "label": "Material Planning"
-  },
-  {
    "fieldname": "stock_entry_tab",
    "fieldtype": "Tab Break",
    "label": "Stock Entry"
@@ -142,6 +132,16 @@
    "fieldname": "stock_entry_details",
    "fieldtype": "HTML",
    "label": "Stock Entry Details"
+  },
+  {
+   "fieldname": "item_issue_tab",
+   "fieldtype": "Tab Break",
+   "label": "Item Issue"
+  },
+  {
+   "fieldname": "item_issue_details",
+   "fieldtype": "HTML",
+   "label": "Item Issue Details"
   },
   {
    "fieldname": "project",
@@ -161,7 +161,7 @@
  "index_web_pages_for_search": 1,
  "is_submittable": 1,
  "links": [],
- "modified": "2026-05-04 23:18:40.264229",
+ "modified": "2026-06-04 10:52:23.415472",
  "modified_by": "Administrator",
  "module": "Custom Batch Planning",
  "name": "Batches Planned",

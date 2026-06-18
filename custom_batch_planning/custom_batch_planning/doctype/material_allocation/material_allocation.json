@@ -14,6 +14,7 @@
     "mr_created",
     "amended_from",
     "batch_planning",
+    "batches_planned",
     "material_allocation_table_section",
     "material_allocation"
   ],
@@ -34,7 +35,8 @@
       "fetch_from": "employee_function.function_head_name",
       "fieldname": "function_head_name",
       "fieldtype": "Data",
-      "label": "Function Head Name"
+      "label": "Function Head Name",
+      "read_only": 1
     },
     {
       "fieldname": "project_id",
@@ -74,8 +76,15 @@
       "fieldtype": "Link",
       "in_list_view": 1,
       "label": "Planned Batch",
-      "options": "Batches Planned",
+      "options": "Batch Planning",
       "reqd": 1
+    },
+    {
+      "fieldname": "batches_planned",
+      "fieldtype": "Data",
+      "in_list_view": 1,
+      "label": "Planned Batch References",
+      "read_only": 1
     },
     {
       "allow_on_submit": 1,

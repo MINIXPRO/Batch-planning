@@ -104,7 +104,8 @@
    "fieldname": "batch_details",
    "fieldtype": "Table",
    "label": "Batch Details",
-   "options": "MA Batch Detail"
+   "options": "MA Batch Detail",
+   "read_only": 1
   }
  ],
  "grid_page_length": 50,

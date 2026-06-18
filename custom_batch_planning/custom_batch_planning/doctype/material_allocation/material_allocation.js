@@ -580,6 +580,14 @@ frappe.ui.form.on("Material Allocation", {
             }, 500);
         }
 
+        if (!frm.is_new()) {
+            frm.set_df_property("employee_function", "read_only", 1);
+            frm.set_df_property("batch_planning", "read_only", 1);
+        }
+
+        frm.set_df_property("material_allocation", "cannot_add_rows", 1);
+        frm.set_df_property("material_allocation", "cannot_delete_rows", 1);
+
         // Lock grid if Allocated/Deallocated
         if (frm.doc.allocation_status) {
             frm.set_df_property("material_allocation", "read_only", 1);
@@ -587,10 +595,43 @@ frappe.ui.form.on("Material Allocation", {
         } else {
             frm.fields_dict["material_allocation"].grid.editable_grid = true;
             frm.fields_dict["material_allocation"].grid.update_docfield_property(
-                "allocate_qty", "read_only", 0,
+                "item_code", "read_only", 1
             );
             frm.fields_dict["material_allocation"].grid.update_docfield_property(
-                "reason", "read_only", 0,
+                "item_name", "read_only", 1
+            );
+            frm.fields_dict["material_allocation"].grid.update_docfield_property(
+                "uom", "read_only", 1
+            );
+            frm.fields_dict["material_allocation"].grid.update_docfield_property(
+                "quantity_required", "read_only", 1
+            );
+            frm.fields_dict["material_allocation"].grid.update_docfield_property(
+                "stock_available", "read_only", 1
+            );
+            frm.fields_dict["material_allocation"].grid.update_docfield_property(
+                "open_pr", "read_only", 1
+            );
+            frm.fields_dict["material_allocation"].grid.update_docfield_property(
+                "open_po", "read_only", 1
+            );
+            frm.fields_dict["material_allocation"].grid.update_docfield_property(
+                "grn_qty", "read_only", 1
+            );
+            frm.fields_dict["material_allocation"].grid.update_docfield_property(
+                "qty_allocated", "read_only", 1
+            );
+            frm.fields_dict["material_allocation"].grid.update_docfield_property(
+                "shortage", "read_only", 1
+            );
+            frm.fields_dict["material_allocation"].grid.update_docfield_property(
+                "batch_details", "read_only", 1
+            );
+            frm.fields_dict["material_allocation"].grid.update_docfield_property(
+                "allocate_qty", "read_only", 0
+            );
+            frm.fields_dict["material_allocation"].grid.update_docfield_property(
+                "reason", "read_only", 0
             );
             frm.refresh_field("material_allocation");
         }
@@ -608,8 +649,8 @@ frappe.ui.form.on("Material Allocation", {
             }
         }
 
-        // ── View Allocation History Button ──
-        if (!frm.is_new() && frm.doc.batch_planning && frm.doc.workflow_state === "Approved") {
+        // ── View Allocation History Button (always visible if Planned Batch is set) ──
+        if (!frm.is_new() && frm.doc.batch_planning) {
             frm.add_custom_button(__("📋 Allocation History"), function () {
                 frappe.call({
                     method: "frappe.client.get_list",
@@ -779,36 +820,25 @@ frappe.ui.form.on("Material Allocation", {
     },
 
     validate: function (frm) {
-        let stock_error = null;
         let reason_error = null;
-        let shortage_rows = [];
+        let bom_error = null;
 
         (frm.doc.material_allocation || []).forEach(function (row) {
-            let stock = parseFloat(row.stock_available || 0);
             let alloc = parseFloat(row.allocate_qty || 0);
+            let bom_qty = parseFloat(row.quantity_required || 0);
 
-            if (!stock_error && stock < alloc) {
-                shortage_rows.push(row);
+            if (!bom_error && alloc > bom_qty) {
+                bom_error = `Row ${row.idx} (${row.item_name || row.item_code}): Qty Requested (${alloc}) cannot exceed Consolidated BOM Qty (${bom_qty}).`;
             }
-            if (!reason_error && row.allocate_qty != row.quantity_required && !row.reason) {
+            if (!reason_error && alloc != bom_qty && !row.reason) {
                 reason_error = `Row ${row.idx} (${row.item_name || row.item_code}): Qty Requested differs from Quantity Required. Please fill Reason.`;
             }
         });
 
-        if (shortage_rows.length > 0) {
-            let rows_list = shortage_rows
-                .map(
-                    (r) =>
-                        `Row ${r.idx} — <b>${r.item_code}</b>: Stock Available (${r.stock_available || 0}) < Qty Requested (${r.allocate_qty || 0})`,
-                )
-                .join("<br>");
+        if (bom_error) {
             frappe.msgprint({
-                title: __("⚠️ Insufficient Stock"),
-                message: __(
-                    "The following items have <b>Stock Available less than Qty Requested</b>. " +
-                    "Please adjust the Qty Requested shortages.<br><br>" +
-                    rows_list,
-                ),
+                title: __("Validation Failed"),
+                message: __(bom_error),
                 indicator: "red",
             });
             frappe.validated = false;
@@ -853,7 +883,7 @@ frappe.ui.form.on("Material Allocation", {
     batch_planning: function (frm) {
         if (!frm.doc.batch_planning) return;
         frappe.db.get_value(
-            "Batches Planned",
+            "Batch Planning",
             frm.doc.batch_planning,
             ["project", "project_name"],
             function (data) {
@@ -1079,71 +1109,61 @@ window.create_stock_entry = function (frm) {
                         return;
                     }
 
-                    // Step 2: Get BOM from Batch Planning → Batch Creation
+                    // Step 2: Get BOM from Batch Planning directly
                     frappe.call({
+                        vanity: true,
                         method: "frappe.client.get",
-                        args: { doctype: "Batches Planned", name: frm.doc.batch_planning },
-                        callback: function (bp_res) {
-                            let bp = bp_res.message;
+                        args: { doctype: "Batch Planning", name: frm.doc.batch_planning },
+                        callback: function (bc_res) {
+                            let rows = bc_res.message.custom_batch_details || [];
+                            let matched = rows.find(r => r.bom_list);
+                            let bom_no = matched ? matched.bom_list : null;
 
-                            frappe.call({
-                                method: "frappe.client.get",
-                                args: { doctype: "Batch Creation", name: bp.batch_creation },
-                                callback: function (bc_res) {
-                                    let rows = bc_res.message.custom_batch_details || [];
+                            // Step 3: Build items list from MA child table
+                            let items = (frm.doc.material_allocation || []).map(row => ({
+                                item_code: row.item_code,
+                                item_name: row.item_name,
+                                qty: row.allocate_qty,
+                                uom: row.uom,
+                                s_warehouse: from_warehouse,
+                                conversion_factor: 1,
+                                transfer_qty: row.allocate_qty,
+                            }));
 
-                                    // Find matched row (same logic as existing code)
-                                    let matched = rows.find(r =>
-                                        r.batch_planning_id === frm.doc.batch_planning ||
-                                        r.batch_planning_id === bp.amended_from ||
-                                        r.batch_planning_id === frm.doc.batch_planning.replace(/-\d+$/, "")
-                                    );
+                            let batch_list = (frm.doc.batches_planned || "").split(",").map(s => s.trim());
+                            let first_batch = batch_list[0] || "";
 
-                                    let bom_no = matched ? matched.bom_list : null;
-
-                                    // Step 3: Build items list from MA child table
-                                    let items = (frm.doc.material_allocation || []).map(row => ({
-                                        item_code: row.item_code,
-                                        item_name: row.item_name,
-                                        qty: row.allocate_qty,
-                                        uom: row.uom,
-                                        s_warehouse: from_warehouse,
-                                        conversion_factor: 1,
-                                        transfer_qty: row.allocate_qty,
-                                    }));
-
-                                    // Step 4: Open new Stock Entry with all details prefilled
-                                    frappe.new_doc("Stock Entry", {
-                                        stock_entry_type: "Material Transfer",
-                                        custom_batch_planning: frm.doc.batch_planning,
-                                        custom_batch_no: frm.doc.batch_planning,
-                                        custom_material_allocation: frm.doc.name,
-                                        from_warehouse: from_warehouse,
-                                        project: frm.doc.project_id,
-                                        bom_no: bom_no || "",
-                                        from_bom: bom_no ? 1 : 0,
-                                        custom_employee_functions: frm.doc.employee_function,
-                                    }).then(() => {
-                                        if (cur_frm) {
-                                            cur_frm.clear_table("items");
-                                            items.forEach(item => {
-                                                let row = cur_frm.add_child("items");
-                                                row.item_code = item.item_code;
-                                                row.item_name = item.item_name;
-                                                row.qty = item.qty;
-                                                row.uom = item.uom;
-                                                row.s_warehouse = item.s_warehouse;
-                                                row.conversion_factor = 1;
-                                                row.transfer_qty = item.qty;
-                                            });
-                                            cur_frm.refresh_field("items");
-                                            frappe.show_alert({
-                                                message: __("✅ Stock Entry created. Please fill Target Warehouse and submit."),
-                                                indicator: "green",
-                                            });
-                                        }
+                            // Step 4: Open new Stock Entry with all details prefilled
+                            frappe.new_doc("Stock Entry", {
+                                stock_entry_type: "Material Transfer",
+                                custom_batch_planning: frm.doc.batches_planned,
+                                custom_batch_no: first_batch,
+                                custom_batch_planning_no: frm.doc.batch_planning,
+                                custom_material_allocation: frm.doc.name,
+                                from_warehouse: from_warehouse,
+                                project: frm.doc.project_id,
+                                bom_no: bom_no || "",
+                                from_bom: bom_no ? 1 : 0,
+                                custom_employee_functions: frm.doc.employee_function,
+                            }).then(() => {
+                                if (cur_frm) {
+                                    cur_frm.clear_table("items");
+                                    items.forEach(item => {
+                                        let row = cur_frm.add_child("items");
+                                        row.item_code = item.item_code;
+                                        row.item_name = item.item_name;
+                                        row.qty = item.qty;
+                                        row.uom = item.uom;
+                                        row.s_warehouse = item.s_warehouse;
+                                        row.conversion_factor = 1;
+                                        row.transfer_qty = item.qty;
                                     });
-                                },
+                                    cur_frm.refresh_field("items");
+                                    frappe.show_alert({
+                                        message: __("✅ Stock Entry created. Please fill Target Warehouse and submit."),
+                                        indicator: "green",
+                                    });
+                                }
                             });
                         },
                     });
@@ -1202,18 +1222,13 @@ window.inject_expiry_badges = function (frm, expiry_map) {
 
 window.upload_bom_items = function (frm) {
     if (!frm.doc.batch_planning) {
-        frappe.msgprint({
-            title: "Missing",
-            message: "Please select Planned Batch first.",
-            indicator: "orange",
-        });
         return;
     }
     frappe.call({
-        method: "custom_batch_planning.custom_batch_planning.doctype.batches_planned.batches_planned.get_bom_items_for_ma",
-        args: { batch_planning: frm.doc.batch_planning },
+        method: "custom_batch_planning.custom_batch_planning.doctype.batch_planning.batch_planning.get_consolidated_bom_components",
+        args: { doc_name: frm.doc.batch_planning },
         freeze: true,
-        freeze_message: "Loading BOM Items...",
+        freeze_message: "Loading Consolidated BOM Items...",
         callback: function (r) {
             if (!r.message || !r.message.length) {
                 frappe.msgprint({
@@ -1229,15 +1244,30 @@ window.upload_bom_items = function (frm) {
                 row.item_code = item.item_code;
                 row.item_name = item.item_name;
                 row.uom = item.uom;
-                row.quantity_required = item.quantity_required;
-                row.allocate_qty = item.quantity_required;
-                row.stock_available = item.stock_available;
+                row.quantity_required = item.qty;
+                row.allocate_qty = item.qty;
+                row.stock_available = 0.0;
             });
             frm.refresh_field("material_allocation");
-            frappe.show_alert({
-                message: "✅ BOM Items loaded! Please review and save.",
-                indicator: "green",
+            // Set comma-separated batches_planned
+            frappe.call({
+                method: "frappe.client.get_list",
+                args: {
+                    doctype: "Batches Planned",
+                    filters: { batch_planning: frm.doc.batch_planning },
+                    fields: ["name"]
+                },
+                callback: function(res) {
+                    if (res.message) {
+                        let names = res.message.map(b => b.name).join(", ");
+                        frm.set_value("batches_planned", names);
+                    }
+                }
             });
+            // Also refresh stock available
+            setTimeout(function() {
+                window.refresh_stock_available(frm);
+            }, 1000);
         },
     });
 };

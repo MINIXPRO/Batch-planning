@@ -1,0 +1,232 @@
+{
+  "actions": [],
+  "allow_rename": 1,
+  "creation": "2026-04-10 09:55:08.880334",
+  "doctype": "DocType",
+  "engine": "InnoDB",
+  "field_order": [
+    "details_tab",
+    "section_break_2vtz",
+    "amended_from",
+    "custom_employee_function",
+    "custom_employee_headname",
+    "month",
+    "slot_opening",
+    "project",
+    "finished_item",
+    "bom_list",
+    "bom_items_storage",
+    "custom_column_break_2si2w",
+    "custom_slot_master",
+    "slot_opening_section",
+    "slot_opening_table",
+    "batch_planning_section",
+    "custom_batch_details",
+    "bom_component_tab",
+    "bom_component_html",
+    "material_planning_tab",
+    "material_planning_html"
+  ],
+  "fields": [
+    {
+      "fieldname": "details_tab",
+      "fieldtype": "Tab Break",
+      "label": "Details"
+    },
+    {
+      "fieldname": "section_break_2vtz",
+      "fieldtype": "Section Break",
+      "label": "Batch Planning"
+    },
+    {
+      "fieldname": "amended_from",
+      "fieldtype": "Link",
+      "label": "Amended From",
+      "no_copy": 1,
+      "options": "Batch Planning",
+      "print_hide": 1,
+      "read_only": 1,
+      "search_index": 1
+    },
+    {
+      "fieldname": "custom_employee_function",
+      "fieldtype": "Link",
+      "label": "Employee Function",
+      "options": "Employee Function",
+      "reqd": 1
+    },
+    {
+      "fieldname": "custom_employee_headname",
+      "fieldtype": "Data",
+      "label": "Employee HeadName",
+      "read_only": 1
+    },
+    {
+      "fieldname": "month",
+      "fieldtype": "Data",
+      "label": "Month",
+      "read_only": 1
+    },
+    {
+      "fieldname": "slot_opening",
+      "fieldtype": "Link",
+      "label": "Slot Opening",
+      "options": "Slot Opening",
+      "read_only": 1
+    },
+    {
+      "fieldname": "project",
+      "fieldtype": "Link",
+      "label": "Project",
+      "options": "Project",
+      "read_only": 1
+    },
+    {
+      "fieldname": "finished_item",
+      "fieldtype": "Link",
+      "label": "Finished Item",
+      "options": "Item"
+    },
+    {
+      "fieldname": "bom_list",
+      "fieldtype": "Link",
+      "label": "BOM List",
+      "options": "BOM"
+    },
+    {
+      "fieldname": "bom_items_storage",
+      "fieldtype": "Table",
+      "hidden": 1,
+      "label": "BOM Items Storage",
+      "options": "Batch BOM Child Table"
+    },
+    {
+      "fieldname": "custom_column_break_2si2w",
+      "fieldtype": "Column Break"
+    },
+    {
+      "fieldname": "custom_slot_master",
+      "fieldtype": "Link",
+      "label": "Slot Master",
+      "options": "Slot Master List",
+      "read_only": 1
+    },
+    {
+      "depends_on": "eval:doc.slot_opening",
+      "fieldname": "slot_opening_section",
+      "fieldtype": "Section Break",
+      "label": "Slot Opening",
+      "read_only": 1
+    },
+    {
+      "depends_on": "eval:doc.slot_opening",
+      "fieldname": "slot_opening_table",
+      "fieldtype": "Table",
+      "label": "Slot Opening Table",
+      "options": "Slot Booking CT",
+      "read_only": 1
+    },
+    {
+      "depends_on": "eval:doc.slot_opening",
+      "fieldname": "batch_planning_section",
+      "fieldtype": "Section Break",
+      "label": "Batch Planning Details"
+    },
+    {
+      "depends_on": "eval:doc.slot_opening",
+      "fieldname": "custom_batch_details",
+      "fieldtype": "Table",
+      "label": "Batch Planning Details",
+      "options": "Batch Planning Detail"
+    },
+    {
+      "depends_on": "eval:doc.docstatus == 1 || doc.workflow_state == 'Approved'",
+      "fieldname": "bom_component_tab",
+      "fieldtype": "Tab Break",
+      "label": "BOM Component"
+    },
+    {
+      "fieldname": "bom_component_html",
+      "fieldtype": "HTML",
+      "label": "BOM Components View"
+    },
+    {
+      "depends_on": "eval:doc.docstatus == 1 || doc.workflow_state == 'Approved'",
+      "fieldname": "material_planning_tab",
+      "fieldtype": "Tab Break",
+      "label": "Material Planning"
+    },
+    {
+      "fieldname": "material_planning_html",
+      "fieldtype": "HTML",
+      "label": "Material Planning View"
+    }
+  ],
+  "grid_page_length": 50,
+  "index_web_pages_for_search": 1,
+  "is_submittable": 1,
+  "links": [
+    {
+      "link_doctype": "Material Request",
+      "link_fieldname": "custom_batch_planning",
+      "hidden": 0,
+      "is_child_table": 0,
+      "custom": 0
+    },
+    {
+      "link_doctype": "Purchase Order",
+      "link_fieldname": "custom_batch_planning",
+      "hidden": 0,
+      "is_child_table": 0,
+      "custom": 0
+    },
+    {
+      "link_doctype": "Purchase Receipt",
+      "link_fieldname": "custom_batch_planning",
+      "hidden": 0,
+      "is_child_table": 0,
+      "custom": 0
+    },
+    {
+      "link_doctype": "Purchase Invoice",
+      "link_fieldname": "custom_batch_planning",
+      "hidden": 0,
+      "is_child_table": 0,
+      "custom": 0
+    },
+    {
+      "link_doctype": "Stock Entry",
+      "link_fieldname": "custom_batch_planning",
+      "hidden": 0,
+      "is_child_table": 0,
+      "custom": 0
+    }
+  ],
+  "modified": "2026-06-05 00:00:00.000000",
+  "modified_by": "Administrator",
+  "module": "Custom Batch Planning",
+  "name": "Batch Planning",
+  "owner": "Administrator",
+  "permissions": [
+    {
+      "create": 1,
+      "delete": 1,
+      "email": 1,
+      "export": 1,
+      "print": 1,
+      "read": 1,
+      "report": 1,
+      "role": "System Manager",
+      "share": 1,
+      "submit": 1,
+      "cancel": 1,
+      "amend": 1,
+      "write": 1
+    }
+  ],
+  "row_format": "Dynamic",
+  "rows_threshold_for_grid_search": 20,
+  "sort_field": "modified",
+  "sort_order": "DESC",
+  "states": []
+}

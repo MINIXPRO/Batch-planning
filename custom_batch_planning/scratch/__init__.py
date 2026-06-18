@@ -1,0 +1,1 @@
+# make scratch a package

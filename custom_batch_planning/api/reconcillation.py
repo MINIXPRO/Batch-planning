@@ -46,7 +46,7 @@ def get_monthly_reconciliation(year=None, month=None, employee_function=None):
         LEFT JOIN `tabPurchase Receipt Item` pri ON pri.parent = pr.name
         LEFT JOIN `tabPurchase Invoice`    pi  ON pi.custom_batch_planning  = bp.batch_planning_id
                                                AND pi.docstatus IN (0, 1)
-        LEFT JOIN `tabMaterial Allocation` ma  ON ma.batch_planning         = bp.batch_planning_id
+        LEFT JOIN `tabMaterial Allocation` ma  ON ma.batches_planned        = bp.batch_planning_id
                                                AND ma.docstatus = 1
         LEFT JOIN `tabStock Entry`         se  ON se.custom_batch_planning  = bp.batch_planning_id
                                                AND se.stock_entry_type = 'Material Issue'

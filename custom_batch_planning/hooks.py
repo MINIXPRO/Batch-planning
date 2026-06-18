@@ -257,7 +257,9 @@ fixtures = [
                 "custom_employee_functions",
                 "custom_material_allocation",
                 "custom_batch_planning",
-                "custom_enable_manufacturing_batch"
+                "custom_enable_manufacturing_batch",
+                "custom_batch_planning_no",
+                "custom_batch_reference"
             ]]
         ]
     }
@@ -265,5 +267,28 @@ fixtures = [
 
 doctype_js = {
     "Material Request": "public/js/material_request_prefill.js",
-    "Stock Entry": "public/js/stock_entry_ma_status.js"
+    "Stock Entry": "public/js/stock_entry_ma_status.js",
+    "Purchase Order": "public/js/purchase_order_consolidation.js"
+}
+
+doc_events = {
+    "Purchase Order": {
+        "validate": "custom_batch_planning.api.po_integration.validate_purchase_order",
+        "on_submit": "custom_batch_planning.custom_batch_planning.utils.propagate_batch_to_items"
+    },
+    "Purchase Receipt": {
+        "before_save": "custom_batch_planning.api.pr_integration.map_purchase_receipt_fields",
+        "on_submit": "custom_batch_planning.custom_batch_planning.utils.propagate_batch_to_items"
+    },
+    "Stock Entry": {
+        "before_save": "custom_batch_planning.api.pr_integration.map_stock_entry_fields",
+        "on_submit": "custom_batch_planning.custom_batch_planning.utils.propagate_batch_to_items"
+    },
+    "Purchase Invoice": {
+        "validate": "custom_batch_planning.api.pr_integration.map_purchase_invoice_fields",
+        "on_submit": "custom_batch_planning.custom_batch_planning.utils.propagate_batch_to_items"
+    },
+    "Material Request": {
+        "on_submit": "custom_batch_planning.custom_batch_planning.utils.propagate_batch_to_items"
+    }
 }

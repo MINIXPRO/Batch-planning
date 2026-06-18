@@ -14,14 +14,14 @@ class BatchesPlanned(Document):
 
     def on_trash(self):
         # 1. Prevent delete if Material Allocation exists
-        if frappe.db.exists("Material Allocation", {"batch_planning": self.name}):
+        if frappe.db.exists("Material Allocation", {"batches_planned": self.name}):
             frappe.throw(
                 f"Cannot delete Batches Planned <b>{self.name}</b>. "
                 f"Material Allocation exists for it."
             )
 
-        # 2. Skip SCT decrement if called from Batch Creation on_trash
-        #    (Batch Creation on_trash already handles decrement before delete)
+        # 2. Skip SCT decrement if called from Batch Planning on_trash
+        #    (Batch Planning on_trash already handles decrement before delete)
         if frappe.flags.get("skip_sct_decrement"):
             return
 
@@ -85,33 +85,13 @@ def get_material_planning_data(items, warehouse, batch_planning, employee_functi
         item_code = item.get("item_code")
         qty_required = flt(item.get("qty_required"))
 
-        # 1. Main Warehouse Stock (Latest from SLE)
-        sle_main = frappe.db.sql(
-            """
-            SELECT qty_after_transaction
-            FROM `tabStock Ledger Entry`
-            WHERE item_code = %s AND warehouse = %s AND is_cancelled = 0
-            ORDER BY posting_date DESC, posting_time DESC, creation DESC
-            LIMIT 1
-        """,
-            (item_code, warehouse),
-        )
+        # 1. Main Warehouse Stock (from Bin)
+        main_stock = flt(frappe.db.get_value("Bin", {"item_code": item_code, "warehouse": warehouse}, "actual_qty"))
 
-        main_stock = flt(sle_main[0][0]) if sle_main else 0.0
-
-        # 2. Lab Warehouse Stock
+        # 2. Lab Warehouse Stock (from Bin)
         lab_stock = 0.0
         for lab_wh in lab_warehouses:
-            row = frappe.db.sql(
-                """
-                SELECT qty_after_transaction FROM `tabStock Ledger Entry`
-                WHERE item_code = %s AND warehouse = %s AND is_cancelled = 0
-                ORDER BY posting_date DESC, posting_time DESC, creation DESC LIMIT 1
-            """,
-                (item_code, lab_wh),
-            )
-            if row:
-                lab_stock += flt(row[0][0])
+            lab_stock += flt(frappe.db.get_value("Bin", {"item_code": item_code, "warehouse": lab_wh}, "actual_qty"))
 
         total_stock = main_stock + lab_stock
 
@@ -250,10 +230,10 @@ def get_material_planning_data(items, warehouse, batch_planning, employee_functi
 @frappe.whitelist()
 def get_bom_items_for_ma(batch_planning):
     bp = frappe.get_doc("Batches Planned", batch_planning)
-    if not bp.batch_creation:
-        frappe.throw("Batch Creation not linked!")
+    if not bp.batch_planning:
+        frappe.throw("Batch Planning not linked!")
 
-    bc = frappe.get_doc("Batch Creation", bp.batch_creation)
+    bc = frappe.get_doc("Batch Planning", bp.batch_planning)
     matched = next(
         (
             row
@@ -271,7 +251,7 @@ def get_bom_items_for_ma(batch_planning):
     if not matched or not matched.bom_list:
         frappe.throw(f"BOM not found for: {batch_planning}")
 
-    batch_key = f"{bp.batch_creation}-{matched.idx}"
+    batch_key = f"{bp.batch_planning}-{matched.idx}"
     use_store = False
     items = []
 
@@ -306,16 +286,8 @@ def get_bom_items_for_ma(batch_planning):
         uom = item.uom if use_store else (item.stock_uom or item.uom)
         item_code = item.item_code
 
-        # Main Stock
-        sle = frappe.db.sql(
-            """
-            SELECT qty_after_transaction FROM `tabStock Ledger Entry`
-            WHERE item_code = %s AND warehouse = %s AND is_cancelled = 0
-            ORDER BY posting_date DESC, posting_time DESC, creation DESC LIMIT 1
-        """,
-            (item_code, warehouse),
-        )
-        main_stock = flt(sle[0][0]) if sle else 0.0
+        # Main Stock (from Bin)
+        main_stock = flt(frappe.db.get_value("Bin", {"item_code": item_code, "warehouse": warehouse}, "actual_qty"))
 
         # Allocated Qty
         # FIX: Exclude both 'Deallocated' AND 'Stock Entry Done'
@@ -381,3 +353,71 @@ def get_stock_entry_items(batch_planning):
                 merged[item.item_code] = dict(item)
 
     return list(merged.values())
+
+
+# ═══════════════════════════════════════════════
+# API : Get Item Issue Data (Consolidated Items)
+# ═══════════════════════════════════════════════
+@frappe.whitelist()
+def get_item_issue_data(batch_planning):
+    """
+    Fetches all SUBMITTED Stock Entries linked to this Batches Planned,
+    extracts child items, and returns a merged/deduplicated list.
+    Duplicate items are merged by item_code with quantities summed.
+    """
+    entries = frappe.get_all(
+        "Stock Entry",
+        filters={
+            "custom_batch_planning": batch_planning,
+            "docstatus": 1,
+        },
+        fields=["name"],
+    )
+
+    if not entries:
+        return []
+
+    # Fetch all child items in one query for performance
+    se_names = [e.name for e in entries]
+    items = frappe.db.sql(
+        """
+        SELECT
+            sed.item_code,
+            sed.item_name,
+            sed.qty,
+            sed.uom,
+            sed.s_warehouse,
+            sed.t_warehouse
+        FROM `tabStock Entry Detail` sed
+        WHERE sed.parent IN %s
+        AND sed.item_code IS NOT NULL
+        AND sed.item_code != ''
+        ORDER BY sed.item_code
+        """,
+        (se_names,),
+        as_dict=True,
+    )
+
+    # Merge duplicates by item_code — sum quantities
+    merged = {}
+    for item in items:
+        code = item.item_code
+        if code in merged:
+            merged[code]["qty"] = flt(merged[code]["qty"]) + flt(item.qty)
+        else:
+            merged[code] = {
+                "item_code": item.item_code,
+                "item_name": item.item_name,
+                "qty": flt(item.qty),
+                "uom": item.uom,
+                "s_warehouse": item.s_warehouse,
+                "t_warehouse": item.t_warehouse,
+            }
+
+    # Round quantities for display
+    result = []
+    for item in merged.values():
+        item["qty"] = round(item["qty"], 3)
+        result.append(item)
+
+    return result
