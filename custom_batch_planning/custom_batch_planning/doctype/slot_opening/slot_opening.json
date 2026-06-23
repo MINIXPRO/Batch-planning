@@ -134,12 +134,12 @@
     "index_web_pages_for_search": 1,
     "links": [
         {
-            "custom": 0,
+            "custom": 1,
             "link_doctype": "Batch Planning",
             "link_fieldname": "slot_opening"
         },
         {
-            "custom": 0,
+            "custom": 1,
             "link_doctype": "Batches Planned",
             "link_fieldname": "slot_opening_id"
         }

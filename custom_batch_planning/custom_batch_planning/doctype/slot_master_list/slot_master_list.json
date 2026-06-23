@@ -118,7 +118,7 @@
       "link_fieldname": "slot_master",
       "hidden": 0,
       "is_child_table": 0,
-      "custom": 0
+      "custom": 1
     }
   ],
   "modified": "2026-06-05 00:00:00.000000",

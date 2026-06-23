@@ -171,35 +171,35 @@
       "link_fieldname": "custom_batch_planning",
       "hidden": 0,
       "is_child_table": 0,
-      "custom": 0
+      "custom": 1
     },
     {
       "link_doctype": "Purchase Order",
       "link_fieldname": "custom_batch_planning",
       "hidden": 0,
       "is_child_table": 0,
-      "custom": 0
+      "custom": 1
     },
     {
       "link_doctype": "Purchase Receipt",
       "link_fieldname": "custom_batch_planning",
       "hidden": 0,
       "is_child_table": 0,
-      "custom": 0
+      "custom": 1
     },
     {
       "link_doctype": "Purchase Invoice",
       "link_fieldname": "custom_batch_planning",
       "hidden": 0,
       "is_child_table": 0,
-      "custom": 0
+      "custom": 1
     },
     {
       "link_doctype": "Stock Entry",
       "link_fieldname": "custom_batch_planning",
       "hidden": 0,
       "is_child_table": 0,
-      "custom": 0
+      "custom": 1
     }
   ],
   "modified": "2026-06-05 00:00:00.000000",
