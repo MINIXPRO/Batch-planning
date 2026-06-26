@@ -1,57 +1,43 @@
 import frappe
-from frappe.utils import flt
+from custom_batch_planning.api.pr_integration import consolidate_items_table
+
 
 def validate_purchase_order(doc, method):
-    # 1. Group items by item_code in doc.items
-    grouped_items = {}
-    for item in doc.items:
-        key = item.item_code
-        if key not in grouped_items:
-            grouped_items[key] = []
-        grouped_items[key].append(item)
-        
-    new_items = []
-    for item_code, rows in grouped_items.items():
-        if len(rows) == 1:
-            target = rows[0]
-            if not target.get("custom_batch_planning_no") and target.get("material_request"):
-                mr_bp_no = frappe.db.get_value("Material Request", target.material_request, "custom_batch_planning_no")
+    """
+    Consolidate identical items (by item_code) and carry the single/multiple
+    custom_batch_planning_no from the linked Material Request or child items
+    to the parent Purchase Order header.
+
+    Rules (simplified design):
+    - Parent PO carries custom_batch_planning_no.
+    - Item-level batch fields (custom_batch_reference) are NOT written.
+    """
+
+    # ── Step 1: Consolidate duplicate item rows and clear custom_batch_reference ──
+    consolidate_items_table(doc)
+
+    # ── Step 2: Set parent custom_batch_planning_no from child items or MR if missing ───
+    if not doc.get("custom_batch_planning_no"):
+        bp_nos = []
+        for item in doc.items:
+            if item.get("custom_batch_planning_no"):
+                bp_nos.append(item.custom_batch_planning_no)
+            elif item.get("material_request"):
+                mr_bp_no = frappe.db.get_value(
+                    "Material Request",
+                    item.material_request,
+                    "custom_batch_planning_no"
+                )
                 if mr_bp_no:
-                    target.custom_batch_planning_no = mr_bp_no
-            new_items.append(target)
-        else:
-            target = rows[0]
-            # Sum up qty
-            total_qty = sum(flt(r.qty) for r in rows)
-            target.qty = total_qty
-            target.stock_qty = total_qty * flt(target.conversion_factor or 1)
-            
-            # Combine custom batch planning info
-            bp_nos = []
-            for r in rows:
-                if r.get("custom_batch_planning_no"):
-                    bp_nos.extend([x.strip() for x in r.custom_batch_planning_no.split(",") if x.strip()])
-                if r.get("material_request"):
-                    mr_bp_no = frappe.db.get_value("Material Request", r.material_request, "custom_batch_planning_no")
-                    if mr_bp_no:
-                        bp_nos.append(mr_bp_no.strip())
-                    
-            target.custom_batch_planning_no = ", ".join(sorted(list(set(bp_nos))))
-            
-            # Recalculate amount = qty * rate
-            target.amount = flt(target.qty * flt(target.rate or 0))
-            new_items.append(target)
-            
-    doc.items = new_items
-    
-    # 2. Update parent Purchase Order header custom_batch_planning_no
-    all_bp_nos = []
-    for item in doc.items:
-        if item.get("custom_batch_planning_no"):
-            all_bp_nos.extend([x.strip() for x in item.custom_batch_planning_no.split(",") if x.strip()])
-            
-    doc.custom_batch_planning_no = ", ".join(sorted(list(set(all_bp_nos))))
-    
-    # 3. Recalculate taxes and totals
+                    bp_nos.append(mr_bp_no)
+        
+        if bp_nos:
+            unique_bp_nos = []
+            for b in bp_nos:
+                if b and b not in unique_bp_nos:
+                    unique_bp_nos.append(b)
+            doc.custom_batch_planning_no = ", ".join(unique_bp_nos)
+
+    # ── Step 3: Recalculate taxes and totals ─────────────────────────────
     if hasattr(doc, "calculate_taxes_and_totals"):
         doc.calculate_taxes_and_totals()

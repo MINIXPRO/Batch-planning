@@ -25,7 +25,13 @@
     "bom_component_tab",
     "bom_component_html",
     "material_planning_tab",
-    "material_planning_html"
+    "material_planning_html",
+    "stock_entry_tab",
+    "stock_entry_details",
+    "stock_entry_log",
+    "item_issue_tab",
+    "item_issue_details",
+    "item_issue_log"
   ],
   "fields": [
     {
@@ -160,6 +166,42 @@
       "fieldname": "material_planning_html",
       "fieldtype": "HTML",
       "label": "Material Planning View"
+    },
+    {
+      "depends_on": "eval:doc.docstatus == 1 || doc.workflow_state == 'Approved'",
+      "fieldname": "stock_entry_tab",
+      "fieldtype": "Tab Break",
+      "label": "Stock Entry"
+    },
+    {
+      "fieldname": "stock_entry_details",
+      "fieldtype": "HTML",
+      "label": "Stock Entry Details"
+    },
+    {
+      "depends_on": "eval:doc.docstatus == 1 || doc.workflow_state == 'Approved'",
+      "fieldname": "item_issue_tab",
+      "fieldtype": "Tab Break",
+      "label": "Item Issue"
+    },
+    {
+      "fieldname": "item_issue_details",
+      "fieldtype": "HTML",
+      "label": "Item Issue Details"
+    },
+    {
+      "fieldname": "stock_entry_log",
+      "fieldtype": "Table",
+      "label": "Stock Entry Log",
+      "options": "Batch Planning Stock Entry",
+      "hidden": 1
+    },
+    {
+      "fieldname": "item_issue_log",
+      "fieldtype": "Table",
+      "label": "Item Issue Log",
+      "options": "Batch Planning Item Issue",
+      "hidden": 1
     }
   ],
   "grid_page_length": 50,

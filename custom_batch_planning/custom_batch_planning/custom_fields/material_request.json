@@ -1,17 +1,10 @@
 [
   {
-    "fieldname": "custom_batch_planning",
-    "label": "Batch Planning",
+    "fieldname": "custom_batch_planning_no",
+    "label": "Batch Planning No",
     "fieldtype": "Link",
     "options": "Batch Planning",
-    "insert_after": "project",
-    "read_only": 0
-  },
-  {
-    "fieldname": "batch_reference",
-    "label": "Batch Reference",
-    "fieldtype": "Data",
-    "insert_after": "qty",
+    "insert_after": "material_request_type",
     "read_only": 0
   }
 ]

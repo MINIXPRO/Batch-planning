@@ -1,0 +1,22 @@
+[
+    {
+        "apply_to_all_doctypes": 1,
+        "condition": null,
+        "dimension_name": "Batch Planning ID",
+        "disabled": 0,
+        "docstatus": 0,
+        "doctype": "Inventory Dimension",
+        "document_type": null,
+        "fetch_from_parent": null,
+        "istable": 0,
+        "mandatory_depends_on": null,
+        "modified": "2026-06-25 11:03:06.004744",
+        "name": "Batch Planning ID",
+        "reference_document": "Batch Planning",
+        "reqd": 0,
+        "source_fieldname": "batch_planning_id",
+        "target_fieldname": "batch_planning_id",
+        "type_of_transaction": "Both",
+        "validate_negative_stock": 0
+    }
+]

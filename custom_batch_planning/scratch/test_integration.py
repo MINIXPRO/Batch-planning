@@ -66,9 +66,8 @@ def run():
         shortages = get_batch_wise_shortages(bp_doc.name)
         print(f"Calculated shortages (count={len(shortages)}):")
         for s in shortages:
-            print(f"  Item: {s['item_code']}, Qty: {s['qty']}, BP: {s['custom_batch_planning_no']}, Ref: {s['custom_batch_reference']}")
+            print(f"  Item: {s['item_code']}, Qty: {s['qty']}, BP: {s['custom_batch_planning_no']}")
             assert s["custom_batch_planning_no"] == bp_doc.name, "Batch Planning name mismatch"
-            assert s["custom_batch_reference"] in ["BATCH-REF-TEST-1", "BATCH-REF-TEST-2"], "Batch Reference mismatch"
             
         # 4. Test Purchase Order Consolidation logic
         print("Testing Purchase Order Consolidation...")

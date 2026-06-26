@@ -38,17 +38,17 @@ def get_monthly_reconciliation(year=None, month=None, employee_function=None):
             COALESCE(SUM(sed.qty), 0)                                              AS issued_qty,
             COALESCE(SUM(sed.basic_amount), 0)                                     AS issued_value
         FROM `tabBatches Planned` bp
-        LEFT JOIN `tabMaterial Request`    mr  ON mr.custom_batch_planning  = bp.batch_planning_id
+        LEFT JOIN `tabMaterial Request`    mr  ON mr.custom_batch_planning_no = bp.batch_planning
                                                AND mr.docstatus IN (0, 1)
-        LEFT JOIN `tabPurchase Order`      po  ON po.custom_batch_planning  = bp.batch_planning_id
-        LEFT JOIN `tabPurchase Receipt`    pr  ON pr.custom_batch_planning  = bp.batch_planning_id
+        LEFT JOIN `tabPurchase Order`      po  ON po.custom_batch_planning_no = bp.batch_planning
+        LEFT JOIN `tabPurchase Receipt`    pr  ON pr.custom_batch_planning_no = bp.batch_planning
                                                AND pr.docstatus = 1
         LEFT JOIN `tabPurchase Receipt Item` pri ON pri.parent = pr.name
-        LEFT JOIN `tabPurchase Invoice`    pi  ON pi.custom_batch_planning  = bp.batch_planning_id
+        LEFT JOIN `tabPurchase Invoice`    pi  ON pi.custom_batch_planning_no = bp.batch_planning
                                                AND pi.docstatus IN (0, 1)
-        LEFT JOIN `tabMaterial Allocation` ma  ON ma.batches_planned        = bp.batch_planning_id
+        LEFT JOIN `tabMaterial Allocation` ma  ON ma.batches_planned          = bp.name
                                                AND ma.docstatus = 1
-        LEFT JOIN `tabStock Entry`         se  ON se.custom_batch_planning  = bp.batch_planning_id
+        LEFT JOIN `tabStock Entry`         se  ON se.custom_batch_planning_no = bp.batch_planning
                                                AND se.stock_entry_type = 'Material Issue'
                                                AND se.docstatus = 1
         LEFT JOIN `tabStock Entry Detail`  sed ON sed.parent = se.name

@@ -70,8 +70,7 @@ def run():
                     "uom": "Nos",
                     "warehouse": "LC01-AR11-FL07-RM078 - MCPL",
                     "schedule_date": frappe.utils.today(),
-                    "custom_batch_planning_no": bp_doc.name,
-                    "custom_batch_reference": "BATCH-REF-TEST-1"
+                    "custom_batch_planning_no": bp_doc.name
                 }
             ]
         })
@@ -128,10 +127,7 @@ def run():
         
         # Verify mapping output
         print("PR Header Batch Planning No:", pr_doc.custom_batch_planning_no)
-        print("PR Header Batch No:", pr_doc.custom_batch_no)
-        
         assert pr_doc.custom_batch_planning_no == bp_doc.name, "Parent Batch Planning No mapping failed"
-        assert pr_doc.custom_batch_no == "BATCH-REF-TEST-1", "Parent Batch No mapping failed"
         
         # Insert Purchase Receipt to allow Stock Entry to fetch from it
         pr_doc.insert(ignore_permissions=True, ignore_mandatory=True)
@@ -159,12 +155,7 @@ def run():
         
         # Verify Stock Entry mapping output
         print("Stock Entry Batch Planning No:", se_doc.custom_batch_planning_no)
-        print("Stock Entry Batch No:", se_doc.custom_batch_no)
-        print("Stock Entry Batch Planning (compatibility):", se_doc.custom_batch_planning)
-        
         assert se_doc.custom_batch_planning_no == bp_doc.name, "Stock Entry Batch Planning No mapping failed"
-        assert se_doc.custom_batch_no == "BATCH-REF-TEST-1", "Stock Entry Batch No mapping failed"
-        assert se_doc.custom_batch_planning == "BATCH-REF-TEST-1", "Stock Entry Batch Planning compatibility mapping failed"
         
         # 7. Create a Purchase Invoice linked to Purchase Receipt
         print("Creating test Purchase Invoice...")

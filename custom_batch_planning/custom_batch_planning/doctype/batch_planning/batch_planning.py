@@ -277,15 +277,16 @@ class BatchPlanning(Document):
                     dt = getdate(batch_start_date)
                     self.month = calendar.month_name[dt.month]
         # *** New check: ensure only one Batch Planning per Slot Opening ***
-        existing = frappe.db.get_value(
-            "Batch Planning",
-            {"slot_opening": self.slot_opening, "name": ["!=", self.name]},
-            "name",
-        )
-        if existing:
-            frappe.throw(
-                f"Slot Opening {self.slot_opening} is already linked to Batch Planning {existing}. Only one Batch Planning per Slot Opening allowed."
+        if self.slot_opening:
+            existing = frappe.db.get_value(
+                "Batch Planning",
+                {"slot_opening": self.slot_opening, "name": ["!=", self.name]},
+                "name",
             )
+            if existing:
+                frappe.throw(
+                    f"Slot Opening {self.slot_opening} is already linked to Batch Planning {existing}. Only one Batch Planning per Slot Opening allowed."
+                )
         
         if self.custom_employee_function:
             self.custom_employee_headname = frappe.db.get_value(
@@ -532,12 +533,28 @@ def create_bulk_material_allocations(batch_planning_name):
         item_code = item["item_code"]
         qty_required = flt(item["qty"])
 
-        # Calculate free stock
-        stock_qty = frappe.db.sql("""
-            SELECT SUM(actual_qty)
+        # Free stock — no batch planning linked
+        free_stock = flt(frappe.db.sql("""
+            SELECT IFNULL(SUM(actual_qty), 0)
             FROM `tabStock Ledger Entry`
-            WHERE item_code = %s AND warehouse = %s AND is_cancelled = 0
-        """, (item_code, warehouse))[0][0] or 0.0
+            WHERE item_code = %s
+            AND warehouse = %s
+            AND (batch_planning_id IS NULL OR batch_planning_id = '')
+            AND is_cancelled = 0
+        """, (item_code, warehouse))[0][0] or 0.0)
+
+        # Stock tagged with this Batch Planning (received via GRN, in main warehouse)
+        bp_tagged_stock = flt(frappe.db.sql("""
+            SELECT IFNULL(SUM(actual_qty), 0)
+            FROM `tabStock Ledger Entry`
+            WHERE item_code = %s
+            AND warehouse = %s
+            AND batch_planning_id = %s
+            AND is_cancelled = 0
+        """, (item_code, warehouse, batch_planning_name))[0][0] or 0.0)
+
+        # Total stock available for allocation
+        stock_qty = free_stock + bp_tagged_stock
 
         allocated_qty = (
             frappe.db.sql(
@@ -554,7 +571,8 @@ def create_bulk_material_allocations(batch_planning_name):
             )[0][0]
             or 0
         )
-        free_stock = max(flt(stock_qty) - flt(allocated_qty), 0)
+        # stock_qty already = free_stock + bp_tagged_stock
+        # No need to subtract allocated_qty here — handled at allocation time via get_batches
 
         ma_data["material_allocation"].append({
             "item_code": item_code,
@@ -562,7 +580,7 @@ def create_bulk_material_allocations(batch_planning_name):
             "uom": item["uom"],
             "quantity_required": qty_required,
             "allocate_qty": qty_required,
-            "stock_available": free_stock
+            "stock_available": stock_qty  # now = free_stock + bp_tagged_stock
         })
 
     return ma_data
@@ -677,6 +695,42 @@ def get_material_planning_data(doc_name):
         r.lab_warehouse for r in (ef_doc.get("table_szrn") or []) if r.lab_warehouse
     ]
 
+    # Pre-build a list of batches with their BOM items
+    # Order: by row index (idx) to deduct greedily batch-by-batch
+    batches_data = []
+    for row in doc.custom_batch_details or []:
+        if not row.bom_list or not row.batch_planning_id:
+            continue
+        
+        batch_key = f"{doc.name}-{row.idx}"
+        bom_store = frappe.db.get_value(
+            "Batch BOM Store after Edit", {"batch_id": batch_key}, "name"
+        )
+        
+        use_store = False
+        components = []
+        if bom_store:
+            store_doc = frappe.get_doc("Batch BOM Store after Edit", bom_store)
+            components = store_doc.bom_components or []
+            use_store = True
+        else:
+            bom = frappe.get_doc("BOM", row.bom_list)
+            components = bom.exploded_items or bom.items or []
+            
+        batch_items = {}
+        for comp in components:
+            item_code = comp.item_code
+            qty = flt(
+                comp.qty if use_store
+                else (comp.qty_consumed_per_unit or comp.stock_qty or comp.qty)
+            )
+            batch_items[item_code] = batch_items.get(item_code, 0.0) + qty
+            
+        batches_data.append({
+            "batch_planning_id": row.batch_planning_id,
+            "items": batch_items
+        })
+
     # Get consolidated items
     consolidated_items = get_consolidated_bom_components(doc_name)
 
@@ -714,83 +768,131 @@ def get_material_planning_data(doc_name):
             or 0
         )
 
-        # 4. Open MR (Material Request) details
-        mr_data = frappe.db.sql(
+        # 4. Free Stock Calculation (SLE where batch_planning_id IS NULL)
+        free_stock = flt(frappe.db.sql(
             """
-            SELECT 
-                GROUP_CONCAT(DISTINCT mr.name) as open_mr_names,
-                IFNULL(SUM(mri.qty - mri.ordered_qty), 0) as mr_total_qty,
-                COUNT(DISTINCT mr.name) as mr_count
+            SELECT IFNULL(SUM(actual_qty), 0)
+            FROM `tabStock Ledger Entry`
+            WHERE item_code = %s
+            AND warehouse = %s
+            AND (batch_planning_id IS NULL OR batch_planning_id = '')
+            AND is_cancelled = 0
+            """,
+            (item_code, warehouse)
+        )[0][0] or 0.0)
+        free_stock = max(free_stock, 0.0)
+
+        # Stock Available Calculation (free stock + stock tagged with this Batch Planning)
+        stock_available = flt(frappe.db.sql(
+            """
+            SELECT IFNULL(SUM(actual_qty), 0)
+            FROM `tabStock Ledger Entry`
+            WHERE item_code = %s
+            AND warehouse = %s
+            AND (
+                batch_planning_id IS NULL
+                OR batch_planning_id = ''
+                OR batch_planning_id = %s
+            )
+            AND is_cancelled = 0
+            """,
+            (item_code, warehouse, doc.name)
+        )[0][0] or 0.0)
+        stock_available = max(stock_available, 0.0)
+
+        # 5. Open MR, PO, GRN details (Global and BP levels)
+        
+        # A. Open MR
+        global_mr_qty = flt(frappe.db.sql(
+            """
+            SELECT IFNULL(SUM(mri.qty - mri.ordered_qty), 0)
             FROM `tabMaterial Request Item` mri
             JOIN `tabMaterial Request` mr ON mr.name = mri.parent
-            WHERE mri.item_code = %s AND mr.custom_employee_function = %s
-              AND mr.docstatus = 1 AND mr.status IN ('Pending', 'Partially Ordered', 'Ordered')
-              AND mri.qty > mri.ordered_qty
+            WHERE mri.item_code = %s
+            AND mr.custom_employee_function = %s
+            AND mr.docstatus = 1
+            AND mr.status NOT IN ('Ordered', 'Stopped', 'Cancelled')
+            AND mri.qty > mri.ordered_qty
             """,
-            (item_code, employee_function),
-            as_dict=True,
-        )
-        mr_names_str = mr_data[0].get("open_mr_names") or "" if mr_data else ""
-        open_mr = mr_names_str
-        open_mr_list = [x.strip() for x in mr_names_str.split(",") if x.strip()]
-        mr_total_qty = flt(mr_data[0].get("mr_total_qty")) if mr_data else 0.0
-        mr_count = int(mr_data[0].get("mr_count")) if mr_data else 0
+            (item_code, employee_function)
+        )[0][0] or 0.0)
 
-        # 5. Open PO details
-        po_data = frappe.db.sql(
+        bp_mr_qty = flt(frappe.db.sql(
             """
-            SELECT 
-                GROUP_CONCAT(DISTINCT po.name) as open_po_names,
-                IFNULL(SUM(poi.qty - poi.received_qty), 0) as po_pending_qty,
-                COUNT(DISTINCT po.name) as po_count
+            SELECT IFNULL(SUM(mri.qty - mri.ordered_qty), 0)
+            FROM `tabMaterial Request Item` mri
+            JOIN `tabMaterial Request` mr ON mr.name = mri.parent
+            WHERE mri.item_code = %s
+            AND mri.batch_planning_id = %s
+            AND mr.docstatus = 1
+            AND mr.status NOT IN ('Ordered', 'Stopped', 'Cancelled')
+            AND mri.qty > mri.ordered_qty
+            """,
+            (item_code, doc.name)
+        )[0][0] or 0.0)
+
+        # B. Open PO
+        global_po_qty = flt(frappe.db.sql(
+            """
+            SELECT IFNULL(SUM(poi.qty - poi.received_qty), 0)
             FROM `tabPurchase Order Item` poi
             JOIN `tabPurchase Order` po ON po.name = poi.parent
-            WHERE poi.item_code = %s AND poi.employee_function = %s
-              AND po.docstatus = 1 
-              AND po.status IN ('To Receive and Bill')
-              AND po.name NOT IN (
-                  SELECT DISTINCT pri2.purchase_order
-                  FROM `tabPurchase Receipt Item` pri2
-                  JOIN `tabPurchase Receipt` pr2 ON pr2.name = pri2.parent
-                  WHERE pr2.docstatus = 1
-              )
-              AND poi.qty > poi.received_qty
+            WHERE poi.item_code = %s
+            AND poi.employee_function = %s
+            AND po.docstatus = 1
+            AND po.status NOT IN ('Completed', 'Cancelled')
+            AND poi.qty > poi.received_qty
             """,
-            (item_code, employee_function),
-            as_dict=True,
-        )
-        po_names_str = po_data[0].get("open_po_names") or "" if po_data else ""
-        open_po_list = [x.strip() for x in po_names_str.split(",") if x.strip()]
-        po_pending_qty = flt(po_data[0].get("po_pending_qty")) if po_data else 0.0
-        po_count = int(po_data[0].get("po_count")) if po_data else 0
+            (item_code, employee_function)
+        )[0][0] or 0.0)
 
-        # 6. Open PR (Purchase Receipt / Goods Receipt Note) details
-        pr_data = frappe.db.sql(
+        bp_po_qty = flt(frappe.db.sql(
             """
-            SELECT 
-                GROUP_CONCAT(DISTINCT pr.name) as open_pr_names,
-                IFNULL(SUM(pri.qty - pri.returned_qty), 0) as pr_total_qty,
-                COUNT(DISTINCT pr.name) as pr_count
+            SELECT IFNULL(SUM(poi.qty - poi.received_qty), 0)
+            FROM `tabPurchase Order Item` poi
+            JOIN `tabPurchase Order` po ON po.name = poi.parent
+            WHERE poi.item_code = %s
+            AND poi.batch_planning_id = %s
+            AND po.docstatus = 1
+            AND po.status NOT IN ('Completed', 'Cancelled')
+            AND poi.qty > poi.received_qty
+            """,
+            (item_code, doc.name)
+        )[0][0] or 0.0)
+
+        # C. Open GRN
+        global_grn_qty = flt(frappe.db.sql(
+            """
+            SELECT IFNULL(SUM(pri.qty - pri.returned_qty), 0)
             FROM `tabPurchase Receipt Item` pri
             JOIN `tabPurchase Receipt` pr ON pr.name = pri.parent
-            WHERE pri.item_code = %s AND pri.employee_function = %s
-              AND pr.docstatus = 1 AND pr.status IN ('To Bill', 'Partly Billed')
+            WHERE pri.item_code = %s
+            AND pri.employee_function = %s
+            AND pr.docstatus = 1
+            AND pr.status NOT IN ('Completed', 'Cancelled')
+            AND pri.qty > pri.returned_qty
             """,
-            (item_code, employee_function),
-            as_dict=True,
-        )
-        pr_names_str = pr_data[0].get("open_pr_names") or "" if pr_data else ""
-        open_pr_list = [x.strip() for x in pr_names_str.split(",") if x.strip()]
-        pr_total_qty = flt(pr_data[0].get("pr_total_qty")) if pr_data else 0.0
-        pr_count = int(pr_data[0].get("pr_count")) if pr_data else 0
+            (item_code, employee_function)
+        )[0][0] or 0.0)
 
-        # 7. Free Stock & Net Requirement Calculation
-        free_stock = max(main_stock - flt(allocated_qty), 0)
-        net_requirement = max(
-            qty_required - (free_stock + mr_total_qty + po_pending_qty + pr_total_qty), 0
-        )
+        bp_grn_qty = flt(frappe.db.sql(
+            """
+            SELECT IFNULL(SUM(pri.qty - pri.returned_qty), 0)
+            FROM `tabPurchase Receipt Item` pri
+            JOIN `tabPurchase Receipt` pr ON pr.name = pri.parent
+            WHERE pri.item_code = %s
+            AND pri.batch_planning_id = %s
+            AND pr.docstatus = 1
+            AND pr.status NOT IN ('Completed', 'Cancelled')
+            AND pri.qty > pri.returned_qty
+            """,
+            (item_code, doc.name)
+        )[0][0] or 0.0)
 
-        # 8. FEFO Batch & Usable Qty
+        # 6. Consolidated Net Requirement Calculation using BP level quantities only
+        net_requirement = max(qty_required - free_stock - bp_mr_qty - bp_po_qty - bp_grn_qty, 0.0)
+
+        # 7. FEFO Batch & Usable Qty
         batch_info = frappe.db.sql(
             """
             SELECT b.expiry_date, SUM(sle.actual_qty) AS actual_qty
@@ -806,7 +908,7 @@ def get_material_planning_data(doc_name):
             as_dict=True,
         )
 
-        # 9. Expired Quantity
+        # 8. Expired Quantity
         expired_qty = (
             frappe.db.sql(
                 """
@@ -835,19 +937,20 @@ def get_material_planning_data(doc_name):
                 "lab_stock": round(lab_stock, 2),
                 "allocated_qty": round(flt(allocated_qty), 2),
                 "free_stock": round(free_stock, 2),
-                "open_pr": round(mr_total_qty, 2),        # Corrected: Maps to incoming Material Request Qty
-                "open_po": round(po_pending_qty, 2),   # Corrected: Maps to Open Purchase Order Qty
-                "open_grn": round(pr_total_qty, 2),        # Corrected: Maps to Received Purchase Receipt Qty
-                "open_mr": open_mr,
-                "mr_total_qty": round(mr_total_qty, 2),
-                "mr_count": mr_count,
-                "open_mr_list": open_mr_list,
-                "po_pending_qty": round(po_pending_qty, 2),
-                "po_count": po_count,
-                "open_po_list": open_po_list,
-                "pr_total_qty": round(pr_total_qty, 2),
-                "pr_count": pr_count,
-                "open_pr_list": open_pr_list,
+                "stock_available": round(stock_available, 2),
+                "global_mr_qty": global_mr_qty,
+                "bp_mr_qty": bp_mr_qty,
+                "global_po_qty": global_po_qty,
+                "bp_po_qty": bp_po_qty,
+                "global_grn_qty": global_grn_qty,
+                "bp_grn_qty": bp_grn_qty,
+                # Keep backward compatibility keys
+                "open_pr": round(bp_mr_qty, 2),
+                "open_po": round(bp_po_qty, 2),
+                "open_grn": round(bp_grn_qty, 2),
+                "mr_total_qty": round(bp_mr_qty, 2),
+                "po_pending_qty": round(bp_po_qty, 2),
+                "pr_total_qty": round(bp_grn_qty, 2),
                 "net_requirement": round(net_requirement, 2),
                 "usable_qty": round(usable_qty, 2),
                 "expired_qty": round(flt(expired_qty), 2),
@@ -856,8 +959,8 @@ def get_material_planning_data(doc_name):
         )
 
     return {
-        "warehouse": warehouse,
-        "results": res
+        "results": res,
+        "warehouse": warehouse
     }
 
 
@@ -893,6 +996,7 @@ def make_material_request(doc_name):
         row.uom = comp.get("uom")
         row.warehouse = warehouse
         row.conversion_factor = 1
+        row.batch_planning_id = doc.name
     mr.insert(ignore_permissions=True)
     frappe.db.commit()
     return mr.name
@@ -919,8 +1023,9 @@ def temp_db_fix():
 @frappe.whitelist()
 def get_batch_wise_shortages(doc_name):
     doc = frappe.get_doc("Batch Planning", doc_name)
-    shortages = []
-
+    
+    # 1. Sum qty_needed across all batches by item_code
+    item_requirements = {}
     for row in doc.custom_batch_details or []:
         if not row.bom_list or not row.batch_planning_id:
             continue
@@ -948,32 +1053,43 @@ def get_batch_wise_shortages(doc_name):
                 item.qty if use_store
                 else (item.qty_consumed_per_unit or item.stock_qty or item.qty)
             )
+            
+            if item_code not in item_requirements:
+                item_requirements[item_code] = {
+                    "item_code": item_code,
+                    "item_name": item_name,
+                    "uom": uom,
+                    "qty_needed": 0.0
+                }
+            item_requirements[item_code]["qty_needed"] += qty_needed
 
-            # Abhi sirf MR check — batch_reference se
-            open_mr_qty = frappe.db.sql("""
-                SELECT COALESCE(SUM(mri.qty - mri.ordered_qty), 0)
-                FROM `tabMaterial Request Item` mri
-                JOIN `tabMaterial Request` mr ON mr.name = mri.parent
-                WHERE mri.item_code = %s
-                AND mri.custom_batch_reference = %s
-                AND mr.docstatus = 1
-                AND mr.status NOT IN ('Stopped', 'Cancelled', 'Ordered')
-            """, (item_code, row.batch_planning_id))[0][0] or 0
+    shortages = []
+    for item_code, req in item_requirements.items():
+        # Query total open MR qty for this item under this Batch Planning
+        open_mr_qty = frappe.db.sql("""
+            SELECT COALESCE(SUM(mri.qty - mri.ordered_qty), 0)
+            FROM `tabMaterial Request Item` mri
+            JOIN `tabMaterial Request` mr ON mr.name = mri.parent
+            WHERE mri.item_code = %s
+            AND mr.custom_batch_planning_no = %s
+            AND mr.docstatus = 1
+            AND mr.status NOT IN ('Stopped', 'Cancelled', 'Ordered')
+            AND mri.qty > mri.ordered_qty
+        """, (item_code, doc.name))[0][0] or 0
 
-            shortage_qty = qty_needed - flt(open_mr_qty)
+        shortage_qty = req["qty_needed"] - flt(open_mr_qty)
 
-            if shortage_qty <= 0:
-                continue
+        if shortage_qty <= 0:
+            continue
 
-            shortages.append({
-                "item_code": item_code,
-                "item_name": item_name,
-                "qty": round(shortage_qty, 4),
-                "uom": uom,
-                "custom_batch_planning_no": doc.name,
-                "custom_batch_reference": row.batch_planning_id,
-                "schedule_date": frappe.utils.add_days(frappe.utils.today(), 1)
-            })
+        shortages.append({
+            "item_code": item_code,
+            "item_name": req["item_name"],
+            "qty": round(shortage_qty, 4),
+            "uom": req["uom"],
+            "custom_batch_planning_no": doc.name,
+            "schedule_date": frappe.utils.add_days(frappe.utils.today(), 1)
+        })
 
     return sorted(shortages, key=lambda x: x["item_code"])
 
@@ -1014,3 +1130,154 @@ def get_project_finished_items(doctype, txt, searchfield, start, page_len, filte
             
         query += f" LIMIT {int(start)}, {int(page_len)}"
         return frappe.db.sql(query, params, as_dict=False)
+
+
+# ═══════════════════════════════════════════════
+# API : Get Stock Entry Items
+# ═══════════════════════════════════════════════
+@frappe.whitelist()
+def get_stock_entry_items(batch_planning):
+    """
+    Fetches all Stock Entries linked to the batch planning ID,
+    extracts the underlying child items, and returns a merged list with combined quantities.
+    """
+    entries = frappe.get_all(
+        "Stock Entry",
+        filters={"custom_batch_planning_no": batch_planning},
+        fields=["name"],
+    )
+
+    merged = {}
+    for se in entries:
+        items = frappe.get_all(
+            "Stock Entry Detail",
+            filters={"parent": se.name},
+            fields=["item_code", "item_name", "qty", "uom", "s_warehouse", "t_warehouse"],
+            ignore_permissions=True,
+        )
+        for item in items:
+            if not item.item_code:
+                continue
+            if item.item_code in merged:
+                merged[item.item_code]["qty"] += item.qty
+            else:
+                merged[item.item_code] = dict(item)
+
+    return list(merged.values())
+
+
+# ═══════════════════════════════════════════════
+# API : Get Item Issue Data (Consolidated Items)
+# ═══════════════════════════════════════════════
+@frappe.whitelist()
+def get_item_issue_data(batch_planning):
+    """
+    Fetches all SUBMITTED Stock Entries linked to this Batch Planning,
+    extracts child items, and returns a merged/deduplicated list.
+    Duplicate items are merged by item_code with quantities summed.
+    """
+    entries = frappe.get_all(
+        "Stock Entry",
+        filters={
+            "custom_batch_planning_no": batch_planning,
+            "docstatus": 1,
+        },
+        fields=["name"],
+    )
+
+    if not entries:
+        return []
+
+    # Fetch all child items in one query for performance
+    se_names = [e.name for e in entries]
+    items = frappe.db.sql(
+        """
+        SELECT
+            sed.item_code,
+            sed.item_name,
+            sed.qty,
+            sed.uom,
+            sed.s_warehouse,
+            sed.t_warehouse
+        FROM `tabStock Entry Detail` sed
+        WHERE sed.parent IN %s
+        AND sed.item_code IS NOT NULL
+        AND sed.item_code != ''
+        ORDER BY sed.item_code
+        """,
+        (se_names,),
+        as_dict=True,
+    )
+
+    # Merge duplicates by item_code — sum quantities
+    merged = {}
+    for item in items:
+        code = item.item_code
+        if code in merged:
+            merged[code]["qty"] = flt(merged[code]["qty"]) + flt(item.qty)
+        else:
+            merged[code] = {
+                "item_code": item.item_code,
+                "item_name": item.item_name,
+                "qty": flt(item.qty),
+                "uom": item.uom,
+                "s_warehouse": item.s_warehouse,
+                "t_warehouse": item.t_warehouse,
+            }
+
+    # Round quantities for display
+    result = []
+    for item in merged.values():
+        item["qty"] = round(item["qty"], 3)
+        result.append(item)
+
+    return result
+
+@frappe.whitelist()
+def on_stock_entry_submit(doc, method):
+    """
+    When Stock Entry is submitted:
+    1. Add one row to stock_entry_log child table on Batch Planning
+    2. Add one row per item to item_issue_log child table on Batch Planning
+    """
+    batch_planning = doc.get("custom_batch_planning_no") or doc.get("custom_batch_planning")
+    if not batch_planning:
+        return
+
+    # Check if doc exists
+    if not frappe.db.exists("Batch Planning", batch_planning):
+        return
+
+    bp = frappe.get_doc("Batch Planning", batch_planning)
+
+    # Check if Stock Entry already logged (avoid duplicates on re-submit)
+    existing_se = [r.stock_entry for r in (bp.stock_entry_log or [])]
+    if doc.name not in existing_se:
+        bp.append("stock_entry_log", {
+            "stock_entry": doc.name,
+            "date": doc.posting_date,
+            "from_warehouse": doc.from_warehouse,
+            "to_warehouse": doc.to_warehouse,
+            "status": "Submitted"
+        })
+
+    # Add one row per item to item_issue_log
+    existing_se_items = [r.stock_entry for r in (bp.item_issue_log or [])]
+    if doc.name not in existing_se_items:
+        for item in doc.items:
+            if not item.item_code:
+                continue
+            bp.append("item_issue_log", {
+                "item_code": item.item_code,
+                "item_name": item.item_name,
+                "qty": item.qty,
+                "uom": item.uom,
+                "from_warehouse": item.s_warehouse,
+                "to_warehouse": item.t_warehouse,
+                "stock_entry": doc.name
+            })
+
+    bp.flags.ignore_permissions = True
+    bp.flags.ignore_validate_update_after_submit = True
+    bp.save(ignore_permissions=True)
+    frappe.db.commit()

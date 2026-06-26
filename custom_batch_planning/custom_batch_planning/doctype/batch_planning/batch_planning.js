@@ -12,6 +12,8 @@ if (typeof XLSX === 'undefined') {
 // ─────────────────────────────────────────────
 frappe.ui.form.on('Batch Planning', {
 
+
+
     refresh: function (frm) {
         if (frm.fields_dict['custom_batch_details']) {
             let grid = frm.fields_dict['custom_batch_details'].grid;
@@ -94,6 +96,8 @@ frappe.ui.form.on('Batch Planning', {
             } else {
                 render_material_planning_placeholder(frm);
             }
+            render_stock_entry_tab(frm);
+            render_item_issue_tab(frm);
 
             frm.remove_custom_button(__("Run Material Planning"));
             frm.add_custom_button(__("Run Material Planning"), function () {
@@ -161,7 +165,6 @@ frappe.ui.form.on('Batch Planning', {
                                     row.conversion_factor = 1;
                                     row.schedule_date = item.schedule_date;
                                     row.custom_batch_planning_no = item.custom_batch_planning_no;
-                                    row.custom_batch_reference = item.custom_batch_reference;
                                     row.project = frm.doc.project;
                                 });
                                 cur_frm.refresh_field("items");
@@ -1432,6 +1435,71 @@ function render_material_planning_tab(frm) {
 
             let rows_html = data.map((row, i) => {
                 let bg = i % 2 === 0 ? "#f9fafb" : "#ffffff";
+                
+                let mr_qty_sum = parseFloat(row.global_mr_qty || 0) + parseFloat(row.bp_mr_qty || 0);
+                let po_qty_sum = parseFloat(row.global_po_qty || 0) + parseFloat(row.bp_po_qty || 0);
+                let grn_qty_sum = parseFloat(row.global_grn_qty || 0) + parseFloat(row.bp_grn_qty || 0);
+
+                let mr_td = "";
+                if (mr_qty_sum > 0) {
+                    mr_td = `
+                        <td style="padding:9px 10px; text-align:center; font-weight:700; cursor:pointer; color:#1f2937;"
+                            onclick="frappe.set_route('List', 'Material Request', {
+                                'custom_employee_function': '${frm.doc.custom_employee_function || ""}',
+                                'docstatus': 1,
+                                'Material Request Item.item_code': '${row.item_code}'
+                            })">
+                            <span>${format_qty_val(row.global_mr_qty)}</span> <span style="color:#16a34a;">(${format_qty_val(row.bp_mr_qty)})</span>
+                        </td>
+                    `;
+                } else {
+                    mr_td = `
+                        <td style="padding:9px 10px; text-align:center; font-weight:700; color:#9ca3af;">
+                            <span>${format_qty_val(row.global_mr_qty)}</span> <span style="color:#d1d5db;">(${format_qty_val(row.bp_mr_qty)})</span>
+                        </td>
+                    `;
+                }
+
+                let po_td = "";
+                if (po_qty_sum > 0) {
+                    po_td = `
+                        <td style="padding:9px 10px; text-align:center; font-weight:700; cursor:pointer; color:#1f2937;"
+                            onclick="frappe.set_route('List', 'Purchase Order', {
+                                'employee_function': '${frm.doc.custom_employee_function || ""}',
+                                'docstatus': 1,
+                                'Purchase Order Item.item_code': '${row.item_code}'
+                            })">
+                            <span>${format_qty_val(row.global_po_qty)}</span> <span style="color:#16a34a;">(${format_qty_val(row.bp_po_qty)})</span>
+                        </td>
+                    `;
+                } else {
+                    po_td = `
+                        <td style="padding:9px 10px; text-align:center; font-weight:700; color:#9ca3af;">
+                            <span>${format_qty_val(row.global_po_qty)}</span> <span style="color:#d1d5db;">(${format_qty_val(row.bp_po_qty)})</span>
+                        </td>
+                    `;
+                }
+
+                let grn_td = "";
+                if (grn_qty_sum > 0) {
+                    grn_td = `
+                        <td style="padding:9px 10px; text-align:center; font-weight:700; cursor:pointer; color:#1f2937;"
+                            onclick="frappe.set_route('List', 'Purchase Receipt', {
+                                'employee_function': '${frm.doc.custom_employee_function || ""}',
+                                'docstatus': 1,
+                                'Purchase Receipt Item.item_code': '${row.item_code}'
+                            })">
+                            <span>${format_qty_val(row.global_grn_qty)}</span> <span style="color:#16a34a;">(${format_qty_val(row.bp_grn_qty)})</span>
+                        </td>
+                    `;
+                } else {
+                    grn_td = `
+                        <td style="padding:9px 10px; text-align:center; font-weight:700; color:#9ca3af;">
+                            <span>${format_qty_val(row.global_grn_qty)}</span> <span style="color:#d1d5db;">(${format_qty_val(row.bp_grn_qty)})</span>
+                        </td>
+                    `;
+                }
+
                 return `
                     <tr style="background:${bg}; border-bottom: 1px solid #e5e7eb;">
                         <td style="padding:9px 10px; text-align:center; color:#9ca3af; font-size:12px; font-weight:600;">${i + 1}</td>
@@ -1444,42 +1512,9 @@ function render_material_planning_tab(frm) {
                         <td style="padding:9px 10px; text-align:center; font-weight:700; color:#d97706; font-size:12px;">${format_qty_val(row.allocated_qty)}</td>
                         <td style="padding:9px 10px; text-align:center; font-weight:700; font-size:12px; color:${parseFloat(row.free_stock || 0) > 0 ? "#15803d" : "#dc2626"};">${format_qty_val(row.free_stock)}</td>
                         <td style="padding:9px 10px; text-align:center; font-weight:700; color:#7c3aed; font-size:12px;">${format_qty_val(row.lab_stock)}</td>
-                        ${parseFloat(row.qty_required || 0) <= 0 ? `
-                            <td style="padding:9px 10px; text-align:center; font-weight:700; color:#9ca3af;">-</td>
-                        ` : row.mr_count > 0 ? `
-                            <td style="padding:9px 10px; text-align:center; font-weight:700; color:#1d4ed8; cursor:pointer;"
-                                onclick="frappe.set_route('List', 'Material Request', {name: ['in', ${JSON.stringify(row.open_mr_list).replace(/"/g, "'")}], docstatus: 1, status: ['in', ['Pending', 'Partially Ordered', 'Ordered']]})">
-                                ${format_qty_val(row.mr_total_qty)} (${row.mr_count})
-                            </td>
-                        ` : `
-                            <td style="padding:9px 10px; text-align:center; font-weight:700; color:#4b5563;">
-                                0
-                            </td>
-                        `}
-                        ${parseFloat(row.qty_required || 0) <= 0 ? `
-                            <td style="padding:9px 10px; text-align:center; font-weight:700; color:#9ca3af;">-</td>
-                        ` : row.po_count > 0 ? `
-                            <td style="padding:9px 10px; text-align:center; font-weight:700; color:#1d4ed8; cursor:pointer;"
-                                onclick="frappe.set_route('List', 'Purchase Order', {name: ['in', ${JSON.stringify(row.open_po_list).replace(/"/g, "'")}], docstatus: 1, status: ['in', ['To Receive and Bill', 'To Receive', 'Partially Received']]})">
-                                ${format_qty_val(row.po_pending_qty)} (${row.po_count})
-                            </td>
-                        ` : `
-                            <td style="padding:9px 10px; text-align:center; font-weight:700; color:#4b5563;">
-                                0
-                            </td>
-                        `}
-                        ${parseFloat(row.qty_required || 0) <= 0 ? `
-                            <td style="padding:9px 10px; text-align:center; font-weight:700; color:#9ca3af;">-</td>
-                        ` : row.pr_count > 0 ? `
-                            <td style="padding:9px 10px; text-align:center; font-weight:700; color:#1d4ed8; cursor:pointer;"
-                                onclick="frappe.set_route('List', 'Purchase Receipt', {name: ['in', ${JSON.stringify(row.open_pr_list).replace(/"/g, "'")}], docstatus: 1, status: ['in', ['To Bill', 'Return Issued']]})">
-                                ${format_qty_val(row.pr_total_qty)} (${row.pr_count})
-                            </td>
-                        ` : `
-                            <td style="padding:9px 10px; text-align:center; font-weight:700; color:#4b5563;">
-                                0
-                            </td>
-                        `}
+                        ${mr_td}
+                        ${po_td}
+                        ${grn_td}
                         <td style="padding:9px 10px; text-align:center; font-weight:700; font-size:12px; color:${parseFloat(row.net_requirement || 0) > 0 ? "#dc2626" : "#15803d"};">${format_qty_val(row.net_requirement)}</td>
                         <td style="padding:9px 10px; text-align:center; font-weight:700; color:#15803d; font-size:12px;">${format_qty_val(row.usable_qty)}</td>
                         <td style="padding:9px 10px; text-align:center; font-weight:700; color:#dc2626; font-size:12px;">${format_qty_val(row.expired_qty)}</td>
@@ -1567,4 +1602,72 @@ function set_project_filter(frm) {
             });
         }
     });
+}
+
+function render_stock_entry_tab(frm) {
+    let rows = frm.doc.stock_entry_log || [];
+    let html = '';
+    if (!rows.length) {
+        html = '<p style="padding: 20px; text-align: center; color: #6b7280; border: 2px dashed #e5e7eb; border-radius: 8px; margin-top: 15px;">No Stock Entries Yet</p>';
+    } else {
+        html = `<table class="table table-bordered">
+            <thead><tr>
+                <th>#</th>
+                <th>Stock Entry</th>
+                <th>Date</th>
+                <th>From Warehouse</th>
+                <th>To Warehouse</th>
+                <th>Status</th>
+            </tr></thead><tbody>`;
+        rows.forEach((r, i) => {
+            html += `<tr>
+                <td>${i + 1}</td>
+                <td><a href="/app/stock-entry/${r.stock_entry}">${r.stock_entry}</a></td>
+                <td>${r.date || ''}</td>
+                <td>${r.from_warehouse || ''}</td>
+                <td>${r.to_warehouse || ''}</td>
+                <td>${r.status || ''}</td>
+            </tr>`;
+        });
+        html += '</tbody></table>';
+    }
+    if (frm.fields_dict["stock_entry_details"] && frm.fields_dict["stock_entry_details"].$wrapper) {
+        frm.fields_dict["stock_entry_details"].$wrapper.html(html);
+    }
+}
+
+function render_item_issue_tab(frm) {
+    let rows = frm.doc.item_issue_log || [];
+    let html = '';
+    if (!rows.length) {
+        html = '<p style="padding: 20px; text-align: center; color: #6b7280; border: 2px dashed #e5e7eb; border-radius: 8px; margin-top: 15px;">No Items Issued Yet</p>';
+    } else {
+        html = `<table class="table table-bordered">
+            <thead><tr>
+                <th>#</th>
+                <th>Item Code</th>
+                <th>Item Name</th>
+                <th>Qty</th>
+                <th>UOM</th>
+                <th>From Warehouse</th>
+                <th>To Warehouse</th>
+                <th>Stock Entry</th>
+            </tr></thead><tbody>`;
+        rows.forEach((r, i) => {
+            html += `<tr>
+                <td>${i + 1}</td>
+                <td>${r.item_code || ''}</td>
+                <td>${r.item_name || ''}</td>
+                <td>${r.qty || 0}</td>
+                <td>${r.uom || ''}</td>
+                <td>${r.from_warehouse || ''}</td>
+                <td>${r.to_warehouse || ''}</td>
+                <td><a href="/app/stock-entry/${r.stock_entry}">${r.stock_entry}</a></td>
+            </tr>`;
+        });
+        html += '</tbody></table>';
+    }
+    if (frm.fields_dict["item_issue_details"] && frm.fields_dict["item_issue_details"].$wrapper) {
+        frm.fields_dict["item_issue_details"].$wrapper.html(html);
+    }
 }

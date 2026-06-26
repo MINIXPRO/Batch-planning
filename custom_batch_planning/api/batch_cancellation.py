@@ -40,8 +40,18 @@ def get_all_batch_plannings(employee_function=None):
         bp_names = [r.name for r in result]
         fmt = ",".join(["%s"] * len(bp_names))
 
+        # Build a map from Batches Planned name → Batch Planning parent name
+        bp_parent_rows = frappe.db.sql(f"""
+            SELECT name, batch_planning
+            FROM `tabBatches Planned`
+            WHERE name IN ({fmt})
+        """, bp_names, as_dict=True)
+        bp_to_parent = {r.name: r.batch_planning for r in bp_parent_rows}
+        bp_parents = list(set([v for v in bp_to_parent.values() if v]))
+        fmt_parents = ",".join(["%s"] * len(bp_parents)) if bp_parents else None
+
         # -----------------------------------------
-        # Linked MAs
+        # Linked MAs  (by Batches Planned name)
         # -----------------------------------------
 
         ma_data = frappe.db.sql(f"""
@@ -54,21 +64,24 @@ def get_all_batch_plannings(employee_function=None):
         ma_map = {r.batches_planned: r.cnt for r in ma_data}
 
         # -----------------------------------------
-        # Linked MRs
+        # Linked MRs  (by Batch Planning parent name)
         # -----------------------------------------
 
-        mr_data = frappe.db.sql(f"""
-            SELECT custom_batch_planning, COUNT(*) as cnt
-            FROM `tabMaterial Request`
-            WHERE custom_batch_planning IN ({fmt})
-            AND docstatus IN (0, 1)
-            GROUP BY custom_batch_planning
-        """, bp_names, as_dict=True)
-        mr_map = {r.custom_batch_planning: r.cnt for r in mr_data}
+        mr_by_parent = {}
+        if bp_parents and fmt_parents:
+            mr_data = frappe.db.sql(f"""
+                SELECT custom_batch_planning_no, COUNT(*) as cnt
+                FROM `tabMaterial Request`
+                WHERE custom_batch_planning_no IN ({fmt_parents})
+                AND docstatus IN (0, 1)
+                GROUP BY custom_batch_planning_no
+            """, bp_parents, as_dict=True)
+            mr_by_parent = {r.custom_batch_planning_no: r.cnt for r in mr_data}
 
         for r in result:
             r.ma_count = ma_map.get(r.name, 0)
-            r.mr_count = mr_map.get(r.name, 0)
+            parent = bp_to_parent.get(r.name)
+            r.mr_count = mr_by_parent.get(parent, 0) if parent else 0
 
     return result
 
@@ -130,7 +143,7 @@ def bp_cancel_with_workflow(name=None):
         linked_mrs = frappe.get_all(
             "Material Request",
             filters={
-                "custom_batch_planning": name,
+                "custom_batch_planning_no": name,
                 "docstatus": 1
             },
             fields=["name"]

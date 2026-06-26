@@ -289,32 +289,28 @@ def get_batch_dashboard_data(batch_planning=None):
     # -------------------------------------------------
     po_map = {}
     if bp_parents:
-        po_raw = frappe.db.sql("""
-            SELECT name, custom_batch_planning_no
+        po_data = frappe.db.sql(f"""
+            SELECT custom_batch_planning_no, COUNT(*) as cnt
             FROM `tabPurchase Order`
             WHERE docstatus IN (0, 1)
-              AND custom_batch_planning_no IS NOT NULL
-              AND custom_batch_planning_no != ''
-        """, as_dict=True)
-        for parent in bp_parents:
-            po_map[parent] = sum(
-                1 for po in po_raw 
-                if parent in [x.strip() for x in po.custom_batch_planning_no.split(",") if x.strip()]
-            )
+              AND custom_batch_planning_no IN ({fmt_parents})
+            GROUP BY custom_batch_planning_no
+        """, bp_parents, as_dict=True)
+        po_map = {r.custom_batch_planning_no: r.cnt for r in po_data}
 
     # -------------------------------------------------
     # Purchase Receipts (GRN)
     # -------------------------------------------------
     grn_map = {}
-    if bp_names:
+    if bp_parents:
         grn_data = frappe.db.sql(f"""
-            SELECT custom_batch_no, COUNT(*) as cnt
+            SELECT custom_batch_planning_no, COUNT(*) as cnt
             FROM `tabPurchase Receipt`
-            WHERE custom_batch_no IN ({fmt})
+            WHERE custom_batch_planning_no IN ({fmt_parents})
             AND docstatus IN (0, 1)
-            GROUP BY custom_batch_no
-        """, bp_names, as_dict=True)
-        grn_map = {r.custom_batch_no: r.cnt for r in grn_data}
+            GROUP BY custom_batch_planning_no
+        """, bp_parents, as_dict=True)
+        grn_map = {r.custom_batch_planning_no: r.cnt for r in grn_data}
 
     # -------------------------------------------------
     # Purchase Invoices
@@ -364,33 +360,29 @@ def get_batch_dashboard_data(batch_planning=None):
     # -------------------------------------------------
     po_pending_map = {}
     if bp_parents:
-        po_pending_raw = frappe.db.sql("""
-            SELECT name, custom_batch_planning_no
+        po_pending_data = frappe.db.sql(f"""
+            SELECT custom_batch_planning_no, COUNT(*) as cnt
             FROM `tabPurchase Order`
             WHERE docstatus = 1
               AND per_received < 100
-              AND custom_batch_planning_no IS NOT NULL
-              AND custom_batch_planning_no != ''
-        """, as_dict=True)
-        for parent in bp_parents:
-            po_pending_map[parent] = sum(
-                1 for po in po_pending_raw
-                if parent in [x.strip() for x in po.custom_batch_planning_no.split(",") if x.strip()]
-            )
+              AND custom_batch_planning_no IN ({fmt_parents})
+            GROUP BY custom_batch_planning_no
+        """, bp_parents, as_dict=True)
+        po_pending_map = {r.custom_batch_planning_no: r.cnt for r in po_pending_data}
 
     # -------------------------------------------------
     # PR Pending (Purchase Receipts not submitted)
     # -------------------------------------------------
     pr_pending_map = {}
-    if bp_names:
+    if bp_parents:
         pr_pending_data = frappe.db.sql(f"""
-            SELECT custom_batch_no, COUNT(*) as cnt
+            SELECT custom_batch_planning_no, COUNT(*) as cnt
             FROM `tabPurchase Receipt`
-            WHERE custom_batch_no IN ({fmt})
+            WHERE custom_batch_planning_no IN ({fmt_parents})
             AND docstatus = 0
-            GROUP BY custom_batch_no
-        """, bp_names, as_dict=True)
-        pr_pending_map = {r.custom_batch_no: r.cnt for r in pr_pending_data}
+            GROUP BY custom_batch_planning_no
+        """, bp_parents, as_dict=True)
+        pr_pending_map = {r.custom_batch_planning_no: r.cnt for r in pr_pending_data}
 
     # -------------------------------------------------
     # PI Pending (Purchase Invoices not submitted)
@@ -410,16 +402,16 @@ def get_batch_dashboard_data(batch_planning=None):
     # Material Issues (Stock Entry)
     # -------------------------------------------------
     issue_map = {}
-    if bp_names:
+    if bp_parents:
         issue_data = frappe.db.sql(f"""
-            SELECT custom_batch_planning, COUNT(DISTINCT name) as cnt
+            SELECT custom_batch_planning_no, COUNT(DISTINCT name) as cnt
             FROM `tabStock Entry`
-            WHERE custom_batch_planning IN ({fmt})
+            WHERE custom_batch_planning_no IN ({fmt_parents})
             AND stock_entry_type = 'Material Issue'
             AND docstatus = 1
-            GROUP BY custom_batch_planning
-        """, bp_names, as_dict=True)
-        issue_map = {r.custom_batch_planning: r.cnt for r in issue_data}
+            GROUP BY custom_batch_planning_no
+        """, bp_parents, as_dict=True)
+        issue_map = {r.custom_batch_planning_no: r.cnt for r in issue_data}
 
     # -------------------------------------------------
     # Build Result
@@ -428,7 +420,7 @@ def get_batch_dashboard_data(batch_planning=None):
     for bp in bps:
         n = bp.name
         parent = bp.batch_planning
-        
+
         result.append({
             "name":              n,
             "month":             bp.month or "-",
@@ -439,14 +431,14 @@ def get_batch_dashboard_data(batch_planning=None):
             "employee_function": bp.employee_function or "-",
             "mr_count":          mr_map.get(parent, 0) if parent else 0,
             "po_count":          po_map.get(parent, 0) if parent else 0,
-            "grn_count":         grn_map.get(n, 0),
+            "grn_count":         grn_map.get(parent, 0) if parent else 0,
             "pi_count":          pi_map.get(parent, 0) if parent else 0,
             "ma_count":          ma_map.get(n, 0),
             "pr_pending":        mr_pending_map.get(parent, 0) if parent else 0,
             "po_pending":        po_pending_map.get(parent, 0) if parent else 0,
-            "pr_pending2":       pr_pending_map.get(n, 0),
+            "pr_pending2":       pr_pending_map.get(parent, 0) if parent else 0,
             "pi_pending":        pi_pending_map.get(parent, 0) if parent else 0,
-            "issue_count":       issue_map.get(n, 0)
+            "issue_count":       issue_map.get(parent, 0) if parent else 0
         })
 
     return result

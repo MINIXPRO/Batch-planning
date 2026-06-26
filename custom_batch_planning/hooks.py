@@ -248,6 +248,7 @@ app_license = "mit"
 # ignore_translatable_strings_from = []
 
 fixtures = [
+    # 1. Custom Fields
     {
         "dt": "Custom Field",
         "filters": [
@@ -259,7 +260,18 @@ fixtures = [
                 "custom_batch_planning",
                 "custom_enable_manufacturing_batch",
                 "custom_batch_planning_no",
-                "custom_batch_reference"
+                "batch_planning_id"
+            ]]
+        ]
+    },
+    # 2. Inventory Dimensions
+    {
+        "dt": "Inventory Dimension",
+        "filters": [
+            ["name", "in", [
+                "Batch Planning ID",
+                "Employee Function",
+                "oligo bank"
             ]]
         ]
     }
@@ -272,23 +284,22 @@ doctype_js = {
 }
 
 doc_events = {
+    "Material Request": {
+        "validate": "custom_batch_planning.api.pr_integration.validate_material_request"
+    },
     "Purchase Order": {
         "validate": "custom_batch_planning.api.po_integration.validate_purchase_order",
-        "on_submit": "custom_batch_planning.custom_batch_planning.utils.propagate_batch_to_items"
+        "before_insert": "custom_batch_planning.custom_batch_planning.hooks_po_grn.set_batch_planning_id_on_po"
     },
     "Purchase Receipt": {
         "before_save": "custom_batch_planning.api.pr_integration.map_purchase_receipt_fields",
-        "on_submit": "custom_batch_planning.custom_batch_planning.utils.propagate_batch_to_items"
+        "before_insert": "custom_batch_planning.custom_batch_planning.hooks_po_grn.set_batch_planning_id_on_grn"
     },
     "Stock Entry": {
         "before_save": "custom_batch_planning.api.pr_integration.map_stock_entry_fields",
-        "on_submit": "custom_batch_planning.custom_batch_planning.utils.propagate_batch_to_items"
+        "on_submit": "custom_batch_planning.custom_batch_planning.doctype.batch_planning.batch_planning.on_stock_entry_submit"
     },
     "Purchase Invoice": {
-        "validate": "custom_batch_planning.api.pr_integration.map_purchase_invoice_fields",
-        "on_submit": "custom_batch_planning.custom_batch_planning.utils.propagate_batch_to_items"
-    },
-    "Material Request": {
-        "on_submit": "custom_batch_planning.custom_batch_planning.utils.propagate_batch_to_items"
+        "validate": "custom_batch_planning.api.pr_integration.map_purchase_invoice_fields"
     }
 }
