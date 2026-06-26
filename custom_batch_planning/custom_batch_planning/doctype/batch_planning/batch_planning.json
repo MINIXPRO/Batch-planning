@@ -217,25 +217,25 @@
   {
    "custom": 1,
    "link_doctype": "Purchase Order",
-   "link_fieldname": "custom_batch_planning"
+   "link_fieldname": "custom_batch_planning_no"
   },
   {
    "custom": 1,
    "link_doctype": "Purchase Receipt",
-   "link_fieldname": "custom_batch_planning"
+   "link_fieldname": "custom_batch_planning_no"
   },
   {
    "custom": 1,
    "link_doctype": "Purchase Invoice",
-   "link_fieldname": "custom_batch_planning"
+   "link_fieldname": "custom_batch_planning_no"
   },
   {
    "custom": 1,
    "link_doctype": "Stock Entry",
-   "link_fieldname": "custom_batch_planning"
+   "link_fieldname": "custom_batch_planning_no"
   }
  ],
- "modified": "2026-06-26 12:40:50.118481",
+ "modified": "2026-06-26 14:12:41.087704",
  "modified_by": "Administrator",
  "module": "Custom Batch Planning",
  "name": "Batch Planning",
