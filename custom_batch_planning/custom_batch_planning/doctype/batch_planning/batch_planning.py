@@ -383,7 +383,7 @@ class BatchPlanning(Document):
                 bp.project = frappe.db.get_value("Slot Opening", row.slot_opening_id, "project")
 
             bp.employee_function = self.custom_employee_function
-            bp.employee_name = self.custom_function_head_name
+            bp.employee_name = self.custom_employee_headname
             bp.month = self.month
             bp.batch_type = row.batch_type
             bp.finished_item = row.finished_item
