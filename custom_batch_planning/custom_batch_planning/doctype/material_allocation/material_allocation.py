@@ -168,47 +168,42 @@ class MaterialAllocation(Document):
                 "qty_allocated": item.qty_allocated if status == "Allocated" else 0,
             })
 
-        # ── Table 2: MA Logs — Sum qty across ALL allocated MA docs for this batch
-        log.set("ma_logs", [])
+        # ── Table 2: MA Logs — Incremental updates
+        existing_items = {}
+        for r in (log.ma_logs or []):
+            existing_items[r.item_code] = r
 
-        all_ma_docs = frappe.get_all(
-            "Material Allocation",
-            filters={
-                "batch_planning": self.batch_planning,
-                "allocation_status": "Allocated",
-                "docstatus": ["!=", 2],
-            },
-            fields=["name"],
-        )
-
-        item_map = {}
-        for ma in all_ma_docs:
-            ma_doc = frappe.get_doc("Material Allocation", ma.name)
-            for item in ma_doc.material_allocation:
-                if item.item_code not in item_map:
-                    item_map[item.item_code] = {
+        for item in self.material_allocation:
+            if status == "Allocated":
+                if item.item_code in existing_items:
+                    existing_items[item.item_code].qty_allocated += flt(item.allocate_qty)
+                    existing_items[item.item_code].allocate_qty += flt(item.allocate_qty)
+                    existing_items[item.item_code].allocated_on = now()
+                else:
+                    log.append("ma_logs", {
                         "item_code": item.item_code,
                         "item_name": item.item_name,
                         "uom": item.uom,
-                        "quantity_required": 0.0,
-                        "stock_available": 0.0,
-                        "allocate_qty": 0.0,
-                        "qty_allocated": 0.0,
-                        "shortage": 0.0,
+                        "quantity_required": flt(item.quantity_required),
+                        "stock_available": flt(item.stock_available),
+                        "allocate_qty": flt(item.allocate_qty),
+                        "qty_allocated": flt(item.allocate_qty),
+                        "shortage": flt(item.shortage),
                         "open_pr": flt(item.open_pr),
                         "open_po": flt(item.open_po),
                         "grn_qty": flt(item.grn_qty),
                         "status": "Allocated",
                         "allocated_on": now(),
-                    }
-                item_map[item.item_code]["quantity_required"] += flt(item.quantity_required)
-                item_map[item.item_code]["stock_available"] = flt(item.stock_available)
-                item_map[item.item_code]["allocate_qty"] += flt(item.allocate_qty)
-                item_map[item.item_code]["qty_allocated"] += flt(item.qty_allocated)
-                item_map[item.item_code]["shortage"] += flt(item.shortage)
-
-        for item_data in item_map.values():
-            log.append("ma_logs", item_data)
+                    })
+            elif status == "Deallocated":
+                if item.item_code in existing_items:
+                    existing_items[item.item_code].qty_allocated -= flt(item.allocate_qty)
+                    existing_items[item.item_code].allocate_qty -= flt(item.allocate_qty)
+                    # prevent negative quantities
+                    if existing_items[item.item_code].qty_allocated < 0:
+                        existing_items[item.item_code].qty_allocated = 0
+                    if existing_items[item.item_code].allocate_qty < 0:
+                        existing_items[item.item_code].allocate_qty = 0
 
         log.save(ignore_permissions=True)
 
@@ -400,3 +395,23 @@ def on_stock_entry_submit(stock_entry_name):
     ma_doc.flags.ignore_validate_update_after_submit = True
     ma_doc.save(ignore_permissions=True)
     frappe.db.commit()
+
+@frappe.whitelist()
+def get_allocated_items(batch_planning, employee_function):
+    log_name = frappe.db.get_value(
+        "Material Allocation Log",
+        {"batch_planning": batch_planning, "employee_function": employee_function},
+        "name"
+    )
+    
+    ma_count = frappe.db.count("Material Allocation", filters={
+        "batch_planning": batch_planning,
+        "employee_function": employee_function,
+        "docstatus": 1
+    })
+
+    if not log_name:
+        return {"items": [], "ma_count": ma_count}
+
+    log_doc = frappe.get_doc("Material Allocation Log", log_name)
+    return {"items": log_doc.get("ma_logs", []), "ma_count": ma_count}

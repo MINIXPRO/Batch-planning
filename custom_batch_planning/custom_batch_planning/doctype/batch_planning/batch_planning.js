@@ -114,15 +114,36 @@ frappe.ui.form.on('Batch Planning', {
                     freeze_message: __("Preparing Material Allocation..."),
                     callback: function (r) {
                         if (r.message) {
-                            if (typeof r.message === "string" && r.message.indexOf("already exists") !== -1) {
+                            if (r.message.warning) {
                                 frappe.msgprint({
-                                    title: __("Material Allocation"),
-                                    message: r.message,
+                                    title: __("Material Allocation Note"),
+                                    message: r.message.warning,
                                     indicator: "orange"
                                 });
-                            } else {
-                                frappe.new_doc("Material Allocation", r.message);
                             }
+                            frappe.model.with_doctype("Material Allocation", function() {
+                                    let new_doc = frappe.model.get_new_doc("Material Allocation");
+                                    new_doc.batch_planning = r.message.batch_planning;
+                                    new_doc.batches_planned = r.message.batches_planned;
+                                    new_doc.employee_function = r.message.employee_function;
+                                    new_doc.project_id = r.message.project_id;
+                                    new_doc.project_name = r.message.project_name;
+                                    new_doc.workflow_state = "Draft";
+
+                                    if (r.message.material_allocation) {
+                                        r.message.material_allocation.forEach(function(row) {
+                                            let child = frappe.model.add_child(new_doc, "material_allocation");
+                                            child.item_code = row.item_code;
+                                            child.item_name = row.item_name;
+                                            child.uom = row.uom;
+                                            child.quantity_required = row.quantity_required;
+                                            child.allocate_qty = row.allocate_qty;
+                                            child.stock_available = row.stock_available;
+                                        });
+                                    }
+
+                                    frappe.set_route("Form", "Material Allocation", new_doc.name);
+                                });
                         }
                     }
                 });
@@ -1636,37 +1657,100 @@ function render_stock_entry_tab(frm) {
     }
 }
 
+window.show_item_stock_entries = function(item_code) {
+    if (!window._item_issue_entries || !window._item_issue_entries[item_code]) return;
+    
+    let entries = window._item_issue_entries[item_code];
+    let rows = entries.map(e => `
+        <tr>
+            <td><a href="/app/stock-entry/${e.stock_entry}" target="_blank">${e.stock_entry}</a></td>
+            <td style="font-weight:bold;">${e.qty}</td>
+            <td>${e.from_warehouse || ''}</td>
+            <td>${e.to_warehouse || ''}</td>
+        </tr>
+    `).join("");
+    
+    let d = new frappe.ui.Dialog({
+        title: `Stock Entries for ${item_code}`,
+        size: "large",
+    });
+    
+    d.body.innerHTML = `
+        <table class="table table-bordered">
+            <thead style="background:#f1f5f9; color:#333;">
+                <tr>
+                    <th style="padding:8px 12px;">Stock Entry</th>
+                    <th style="padding:8px 12px;">Qty</th>
+                    <th style="padding:8px 12px;">From Warehouse</th>
+                    <th style="padding:8px 12px;">To Warehouse</th>
+                </tr>
+            </thead>
+            <tbody>
+                ${rows}
+            </tbody>
+        </table>
+    `;
+    d.show();
+};
+
 function render_item_issue_tab(frm) {
     let rows = frm.doc.item_issue_log || [];
     let html = '';
+    
     if (!rows.length) {
         html = '<p style="padding: 20px; text-align: center; color: #6b7280; border: 2px dashed #e5e7eb; border-radius: 8px; margin-top: 15px;">No Items Issued Yet</p>';
     } else {
-        html = `<table class="table table-bordered">
-            <thead><tr>
-                <th>#</th>
-                <th>Item Code</th>
-                <th>Item Name</th>
-                <th>Qty</th>
-                <th>UOM</th>
-                <th>From Warehouse</th>
-                <th>To Warehouse</th>
-                <th>Stock Entry</th>
-            </tr></thead><tbody>`;
-        rows.forEach((r, i) => {
-            html += `<tr>
-                <td>${i + 1}</td>
-                <td>${r.item_code || ''}</td>
-                <td>${r.item_name || ''}</td>
-                <td>${r.qty || 0}</td>
-                <td>${r.uom || ''}</td>
-                <td>${r.from_warehouse || ''}</td>
-                <td>${r.to_warehouse || ''}</td>
-                <td><a href="/app/stock-entry/${r.stock_entry}">${r.stock_entry}</a></td>
-            </tr>`;
+        // Consolidate data
+        let item_map = {};
+        window._item_issue_entries = {};
+        
+        rows.forEach(r => {
+            if (!item_map[r.item_code]) {
+                item_map[r.item_code] = {
+                    item_code: r.item_code,
+                    item_name: r.item_name,
+                    qty: 0,
+                    uom: r.uom
+                };
+                window._item_issue_entries[r.item_code] = [];
+            }
+            item_map[r.item_code].qty += flt(r.qty);
+            
+            window._item_issue_entries[r.item_code].push({
+                stock_entry: r.stock_entry,
+                qty: flt(r.qty),
+                from_warehouse: r.from_warehouse,
+                to_warehouse: r.to_warehouse
+            });
         });
+
+        html = `<table class="table table-bordered">
+            <thead style="background:#f1f5f9; color:#333;"><tr>
+                <th style="padding:8px 12px;">#</th>
+                <th style="padding:8px 12px;">Item Code</th>
+                <th style="padding:8px 12px;">Item Name</th>
+                <th style="padding:8px 12px;">Total Qty</th>
+                <th style="padding:8px 12px;">UOM</th>
+                <th style="padding:8px 12px;">Stock Entries</th>
+            </tr></thead><tbody>`;
+            
+        let index = 1;
+        for (let item_code in item_map) {
+            let r = item_map[item_code];
+            let entries_count = window._item_issue_entries[item_code].length;
+            
+            html += `<tr>
+                <td style="padding:8px 12px;">${index++}</td>
+                <td style="padding:8px 12px; font-weight:bold;">${r.item_code}</td>
+                <td style="padding:8px 12px;">${r.item_name || ''}</td>
+                <td style="padding:8px 12px; font-weight:bold;">${r.qty}</td>
+                <td style="padding:8px 12px;">${r.uom || ''}</td>
+                <td style="padding:8px 12px;"><a href="javascript:void(0)" onclick="window.show_item_stock_entries('${r.item_code}')">${entries_count} Entries</a></td>
+            </tr>`;
+        }
         html += '</tbody></table>';
     }
+    
     if (frm.fields_dict["item_issue_details"] && frm.fields_dict["item_issue_details"].$wrapper) {
         frm.fields_dict["item_issue_details"].$wrapper.html(html);
     }

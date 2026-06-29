@@ -427,7 +427,7 @@ class BatchPlanning(Document):
     def on_submit(self):
         if not ENABLE_AFTER_SUBMIT_LOGIC:
             return
-        if self.workflow_state != "Approved":
+        if getattr(self, 'workflow_state', None) != "Approved":
             return
         self.create_batches_planned_records()
 
@@ -470,12 +470,12 @@ def create_bulk_material_allocations(batch_planning_name):
     Combine all BOM items from all Batches Planned under this BP into a single Material Allocation doc.
     """
     parent_doc = frappe.get_doc("Batch Planning", batch_planning_name)
-    if parent_doc.workflow_state != "Approved":
+    if getattr(parent_doc, 'workflow_state', None) != "Approved":
         frappe.throw("Document is not in Approved state.")
     if parent_doc.docstatus != 1:
         frappe.throw("Document is not submitted yet.")
 
-    # Check if active/submitted Material Allocation already exists for this Batch Planning
+    warning_message = ""
     exists = frappe.db.exists(
         "Material Allocation",
         {
@@ -485,7 +485,7 @@ def create_bulk_material_allocations(batch_planning_name):
         }
     )
     if exists:
-        return f"Material Allocation already exists for Batch Planning {batch_planning_name}: {exists}"
+        warning_message = f"Note: A Material Allocation ({exists}) already exists for Batch Planning {batch_planning_name}."
 
     batches = frappe.get_all(
         "Batches Planned",
@@ -575,6 +575,9 @@ def create_bulk_material_allocations(batch_planning_name):
         # No need to subtract allocated_qty here — handled at allocation time via get_batches
 
         ma_data["material_allocation"].append({
+            "doctype": "Material Allocation Item",
+            "parenttype": "Material Allocation",
+            "parentfield": "material_allocation",
             "item_code": item_code,
             "item_name": item["item_name"],
             "uom": item["uom"],
@@ -582,7 +585,8 @@ def create_bulk_material_allocations(batch_planning_name):
             "allocate_qty": qty_required,
             "stock_available": stock_qty  # now = free_stock + bp_tagged_stock
         })
-
+    if warning_message:
+        ma_data["warning"] = warning_message
     return ma_data
 
 
@@ -593,7 +597,7 @@ def create_batches_planned(doc_name):
     """Called from a custom JS button on the Batch Planning form."""
     doc = frappe.get_doc("Batch Planning", doc_name)
 
-    if doc.workflow_state != "Approved":
+    if getattr(doc, 'workflow_state', None) != "Approved":
         frappe.throw("Document is not in Approved state.")
     if doc.docstatus != 1:
         frappe.throw("Document is not submitted yet.")
@@ -1238,7 +1242,7 @@ def on_stock_entry_submit(doc, method):
     """
     When Stock Entry is submitted:
     1. Add one row to stock_entry_log child table on Batch Planning
-    2. Add one row per item to item_issue_log child table on Batch Planning
+    2. Add one row per item to item_issue_log child table on Batch Planning, aggregating qty for same item
     """
     batch_planning = doc.get("custom_batch_planning_no") or doc.get("custom_batch_planning")
     if not batch_planning:
@@ -1252,22 +1256,33 @@ def on_stock_entry_submit(doc, method):
 
     # Check if Stock Entry already logged (avoid duplicates on re-submit)
     existing_se = [r.stock_entry for r in (bp.stock_entry_log or [])]
-    if doc.name not in existing_se:
-        bp.append("stock_entry_log", {
-            "stock_entry": doc.name,
-            "date": doc.posting_date,
-            "from_warehouse": doc.from_warehouse,
-            "to_warehouse": doc.to_warehouse,
-            "status": "Submitted"
-        })
+    if doc.name in existing_se:
+        return
 
-    # Add one row per item to item_issue_log
-    existing_se_items = [r.stock_entry for r in (bp.item_issue_log or [])]
-    if doc.name not in existing_se_items:
-        for item in doc.items:
-            if not item.item_code:
-                continue
-            bp.append("item_issue_log", {
+    bp.append("stock_entry_log", {
+        "stock_entry": doc.name,
+        "date": doc.posting_date,
+        "from_warehouse": doc.from_warehouse,
+        "to_warehouse": doc.to_warehouse,
+        "status": "Submitted"
+    })
+
+    # Aggregate or add one row per item to item_issue_log
+    existing_items = {}
+    for r in (bp.item_issue_log or []):
+        existing_items[r.item_code] = r
+
+    for item in doc.items:
+        if not item.item_code:
+            continue
+            
+        if item.item_code in existing_items:
+            existing_row = existing_items[item.item_code]
+            existing_row.qty += item.qty
+            if doc.name not in (existing_row.stock_entry or ""):
+                existing_row.stock_entry = f"{existing_row.stock_entry}, {doc.name}" if existing_row.stock_entry else doc.name
+        else:
+            new_row = bp.append("item_issue_log", {
                 "item_code": item.item_code,
                 "item_name": item.item_name,
                 "qty": item.qty,
@@ -1276,6 +1291,7 @@ def on_stock_entry_submit(doc, method):
                 "to_warehouse": item.t_warehouse,
                 "stock_entry": doc.name
             })
+            existing_items[item.item_code] = new_row
 
     bp.flags.ignore_permissions = True
     bp.flags.ignore_validate_update_after_submit = True
