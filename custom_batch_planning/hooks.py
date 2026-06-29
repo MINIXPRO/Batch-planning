@@ -289,11 +289,11 @@ doc_events = {
     },
     "Purchase Order": {
         "validate": "custom_batch_planning.api.po_integration.validate_purchase_order",
-        "before_insert": "custom_batch_planning.custom_batch_planning.hooks_po_grn.set_batch_planning_id_on_po"
+        "before_insert": "custom_batch_planning.hooks_po_grn.set_batch_planning_id_on_po"
     },
     "Purchase Receipt": {
         "before_save": "custom_batch_planning.api.pr_integration.map_purchase_receipt_fields",
-        "before_insert": "custom_batch_planning.custom_batch_planning.hooks_po_grn.set_batch_planning_id_on_grn"
+        "before_insert": "custom_batch_planning.hooks_po_grn.set_batch_planning_id_on_grn"
     },
     "Stock Entry": {
         "before_save": "custom_batch_planning.api.pr_integration.map_stock_entry_fields",

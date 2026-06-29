@@ -208,33 +208,7 @@
  "grid_page_length": 50,
  "index_web_pages_for_search": 1,
  "is_submittable": 1,
- "links": [
-  {
-   "custom": 1,
-   "link_doctype": "Material Request",
-   "link_fieldname": "custom_batch_planning_no"
-  },
-  {
-   "custom": 1,
-   "link_doctype": "Purchase Order",
-   "link_fieldname": "custom_batch_planning_no"
-  },
-  {
-   "custom": 1,
-   "link_doctype": "Purchase Receipt",
-   "link_fieldname": "custom_batch_planning_no"
-  },
-  {
-   "custom": 1,
-   "link_doctype": "Purchase Invoice",
-   "link_fieldname": "custom_batch_planning_no"
-  },
-  {
-   "custom": 1,
-   "link_doctype": "Stock Entry",
-   "link_fieldname": "custom_batch_planning_no"
-  }
- ],
+ "links": [],
  "modified": "2026-06-26 14:12:41.087704",
  "modified_by": "Administrator",
  "module": "Custom Batch Planning",
