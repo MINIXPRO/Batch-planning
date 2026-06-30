@@ -1,12 +1,9 @@
 import frappe
 
-def run():
-    print("=== Sample Project custom_function_info rows ===")
-    rows = frappe.db.get_all("Employee Function Child", fields=["parent", "function_code", "role"], limit=10)
-    for r in rows:
-        print(f"Project: {r.parent} | Function Code: {r.function_code} | Role: {r.role}")
-        
-    print("\n=== Sample Employee Function project_list rows ===")
-    rows_ef = frappe.db.get_all("Project list", fields=["parent", "projects"], limit=10)
-    for r in rows_ef:
-        print(f"Employee Function: {r.parent} | Projects: {r.projects}")
+def execute():
+    doctypes = ["Purchase Receipt", "Purchase Receipt Item", "Purchase Order", "Purchase Order Item", "Purchase Invoice", "Purchase Invoice Item"]
+    for dt in doctypes:
+        meta = frappe.get_meta(dt)
+        for field in meta.fields:
+            if "batch" in field.fieldname.lower():
+                print(f"[{dt}] {field.fieldname} (Label: {field.label}) - Type: {field.fieldtype} - Options: {field.options} - Custom: {field.is_custom_field}")
