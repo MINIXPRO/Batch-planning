@@ -84,9 +84,9 @@ frappe.ui.form.on("Slot Opening", {
 		});
 
 		// ── Custom Button: Create Batch ──
-		// Only shown for saved (non-new) documents
+		// Only shown for approved/submitted documents
 		// Pre-fills the new Batch Creation doc with data from this Slot Opening
-		if (!frm.is_new() && frm.doc.slot_master) {
+		if (frm.doc.docstatus === 1 && frm.doc.slot_master) {
 			frappe.call({
 				method: 'custom_batch_planning.custom_batch_planning.doctype.slot_opening.slot_opening.get_sct_details',
 				args: { slot_master: frm.doc.slot_master },
@@ -102,10 +102,12 @@ frappe.ui.form.on("Slot Opening", {
 						return booked > planned;
 					});
 
-					if (!has_remaining) return;
+					let today = frappe.datetime.nowdate();
+					let end_date_valid = !frm.doc.batch_end_date || frm.doc.batch_end_date >= today;
+
+					if (!has_remaining || !end_date_valid) return;
 
 					frm.add_custom_button(__("➕ Create Batch"), function () {
-						console.log("Hello world  11")
 						if (frm.is_dirty()) {
 							frappe.msgprint(__("Please save the document before creating a Batch."));
 							return;
@@ -124,9 +126,6 @@ frappe.ui.form.on("Slot Opening", {
 								: "",
 							custom_total_batches_planned: frm.doc.total_batches_planned,
 						});
-						console.log("Hello world 2")
-						console.log("1-->", frm.doc.employee_function);
-						console.log("2-->", frm.doc.slot_master);
 					});
 				}
 			});

@@ -69,6 +69,8 @@ frappe.ui.form.on('Slot Master List', {
                     });
                 }
             });
+        } else if (frm.doc.batch_end_date && frm.doc.batch_end_date < today) {
+            frm.remove_custom_button('📋 Create Slot Opening');
         }
 
         if (!frm._realtime_bound) {

@@ -150,9 +150,6 @@ class SlotOpening(Document):
 
         self._check_duplicate_full_capacity()
 
-        # Removed self.is_new() guard block so edits update tracking records correctly
-        self._update_sct()
-
     # ═══════════════════════════════════════════
     # VALIDATE SLOT DATES
     # ═══════════════════════════════════════════
@@ -300,16 +297,8 @@ class SlotOpening(Document):
                     f"not found in SCT ({sct_name})."
                 )
 
-            # Isolate delta if it's an existing document to avoid compounding double-entries
-            if self.is_new():
-                diff = booked
-            else:
-                old_booked = frappe.db.get_value(
-                    "Slot Booking CT",
-                    {"parent": self.name, "slot_booking_date": row.slot_booking_date},
-                    "booked_slots"
-                ) or 0
-                diff = booked - int(old_booked)
+            # Document is only updating SCT on submit now, so apply the full booked amount
+            diff = booked
 
             available = int(sct_detail.capacity_available or 0)
 
@@ -345,7 +334,8 @@ class SlotOpening(Document):
     # ═══════════════════════════════════════════
 
     def on_submit(self):
-        pass
+        if getattr(self, "workflow_state", None) == "Approved":
+            self._update_sct()
 
     # ═══════════════════════════════════════════
     # ON CANCEL

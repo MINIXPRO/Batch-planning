@@ -345,6 +345,34 @@ class BatchPlanning(Document):
                 except Exception:
                     pass
 
+        # 6. Capacity Check: Ensure batches planned per date do not exceed booked capacity on Slot Opening
+        if self.slot_opening:
+            # Get the booked capacity per date from the Slot Opening
+            booked_slots_data = frappe.get_all(
+                "Slot Booking CT",
+                filters={"parent": self.slot_opening},
+                fields=["slot_booking_date", "booked_slots"]
+            )
+            booked_map = {}
+            for d in booked_slots_data:
+                date_key = frappe.utils.getdate(d.slot_booking_date)
+                booked_map[date_key] = booked_map.get(date_key, 0) + (d.booked_slots or 0)
+            
+            # Count the batches being created per date in this Batch Planning doc
+            planned_map = {}
+            for row in self.custom_batch_details or []:
+                if row.slot_booking_date:
+                    date_key = frappe.utils.getdate(row.slot_booking_date)
+                    planned_map[date_key] = planned_map.get(date_key, 0) + 1
+            
+            for d_key, count in planned_map.items():
+                allowed = booked_map.get(d_key, 0)
+                if count > allowed:
+                    frappe.throw(
+                        f"Cannot create {count} batches for {d_key}. You only booked "
+                        f"{allowed} slot(s) for this date on Slot Opening {self.slot_opening}."
+                    )
+
     # ─────────────────────────────────────────
     # COMMON METHOD — Create Batches Planned
     # ─────────────────────────────────────────
@@ -404,12 +432,11 @@ class BatchPlanning(Document):
             )
 
             update_data = {
-                "status": row.status,
-                "workflow_state": row.status,
+                "workflow_state": getattr(row, 'status', None),
             }
-            if row.status == "Approved":
+            if getattr(row, 'status', None) == "Approved":
                 update_data["docstatus"] = 1
-            elif row.status == "Cancelled":
+            elif getattr(row, 'status', None) == "Cancelled":
                 update_data["docstatus"] = 2
 
             frappe.db.set_value(
