@@ -148,18 +148,6 @@ frappe.ui.form.on("Slot Opening", {
 				frappe.set_route("Form", "Slot Opening", frm.doc.name);
 			}
 		}
-
-		frappe.db
-			.get_list("Slot Opening", {
-				filters: { creation: frm.doc.creation },
-				fields: ["name"],
-				limit: 1,
-			})
-			.then(function (r) {
-				if (r && r.length && r[0].name.startsWith("SO-")) {
-					window.location.href = `/app/slot-opening/${r[0].name}`;
-				}
-			});
 	},
 
 	employee_function: function (frm) {
