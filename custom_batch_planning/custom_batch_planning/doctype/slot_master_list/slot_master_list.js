@@ -34,6 +34,23 @@ frappe.ui.form.on('Slot Master List', {
     },
 
     batch_capacity: function (frm) {
+        let val = frm.doc.batch_capacity;
+        if (val !== undefined && val !== null && val !== "") {
+            if (!Number.isInteger(Number(val)) || parseInt(val, 10) < 1) {
+                frappe.msgprint({
+                    title: __('Invalid Capacity'),
+                    message: __('Daily Batch Capacity must be a positive integer.'),
+                    indicator: 'orange'
+                });
+                frappe.model.set_value(frm.doctype, frm.docname, 'batch_capacity', '');
+                return;
+            } else {
+                let intVal = parseInt(val, 10);
+                if (intVal != val) {
+                    frappe.model.set_value(frm.doctype, frm.docname, 'batch_capacity', intVal);
+                }
+            }
+        }
         calculate_totals(frm);
     },
 
@@ -87,13 +104,19 @@ frappe.ui.form.on('Slot Master List', {
     },
 
     validate: function (frm) {
-        if (!frm.doc.batch_capacity || frm.doc.batch_capacity < 1) {
+        let val = frm.doc.batch_capacity;
+        if (val === undefined || val === null || val === "" || !Number.isInteger(Number(val)) || parseInt(val, 10) < 1) {
             frappe.msgprint({
                 title: __('Invalid Capacity'),
-                message: __('Capacity must be at least 1.'),
+                message: __('Daily Batch Capacity must be a valid whole number of at least 1.'),
                 indicator: 'red'
             });
             frappe.validated = false;
+        } else {
+            let intVal = parseInt(val, 10);
+            if (intVal != val) {
+                frm.doc.batch_capacity = intVal;
+            }
         }
     }
 
@@ -104,8 +127,13 @@ function bind_realtime_capacity(frm) {
         frm.fields_dict.batch_capacity.$input
             .off('input.realtime')
             .on('input.realtime', function () {
-                let val = parseFloat($(this).val()) || 0;
-                frm.doc.batch_capacity = val;
+                let val = $(this).val();
+                let parsed = parseInt(val, 10);
+                if (Number.isInteger(Number(val)) && parsed >= 1) {
+                    frm.doc.batch_capacity = parsed;
+                } else {
+                    frm.doc.batch_capacity = 0;
+                }
                 calculate_totals(frm);
             });
     }

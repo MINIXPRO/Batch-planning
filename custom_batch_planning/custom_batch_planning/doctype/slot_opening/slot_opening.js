@@ -61,24 +61,33 @@ frappe.ui.form.on("Slot Opening", {
 						)
 						.join("");
 
-					frappe.msgprint({
-						title: "Capacity Remained",
-						message: `
-                            <table class="table table-bordered" style="width:100%">
-                                <thead style="background:#f0f0f0">
-                                    <tr>
-                                        <th>Date</th>
-                                        <th>Total Capacity</th>
-                                        <th>Booked</th>
-                                        <th>Available</th>
-										<th>Batches Planned</th>
-                                    </tr>
-                                </thead>
-                                <tbody>${rows}</tbody>
-                            </table>
-                        `,
-						wide: true,
+					let d = new frappe.ui.Dialog({
+						title: __("Capacity Remained"),
+						size: "extra-large",
+						fields: [
+							{
+								fieldtype: "HTML",
+								fieldname: "capacity_table",
+								options: `
+									<div style="overflow-x: auto; margin-top: -15px;">
+										<table class="table table-bordered" style="width: 100%; min-width: 600px; margin-bottom: 0;">
+											<thead style="background: #f0f0f0;">
+												<tr>
+													<th>Date</th>
+													<th>Total Capacity</th>
+													<th>Booked</th>
+													<th>Available</th>
+													<th>Batches Planned</th>
+												</tr>
+											</thead>
+											<tbody>${rows}</tbody>
+										</table>
+									</div>
+								`
+							}
+						]
 					});
+					d.show();
 				},
 			});
 		});

@@ -54,8 +54,15 @@ class SlotMasterList(Document):
     def before_save(self):
 
         # Validate Daily Batch Capacity (must be greater than or equal to 1)
-        if not self.batch_capacity or int(self.batch_capacity) < 1:
-            frappe.throw("Daily Batch Capacity must be greater than or equal to 1.")
+        try:
+            capacity = int(self.batch_capacity)
+        except (TypeError, ValueError):
+            frappe.throw("Daily Batch Capacity must be a valid whole number.")
+
+        if capacity < 1:
+            frappe.throw("Daily Batch Capacity must be at least 1.")
+
+        self.batch_capacity = capacity
 
         # Convert dates to string for comparison
         start_date = str(self.batch_start_date) if self.batch_start_date else None
