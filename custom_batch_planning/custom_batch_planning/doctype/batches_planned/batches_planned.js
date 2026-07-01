@@ -1,15 +1,8 @@
-// ============================================================
-// BATCHES PLANNED — CLIENT SCRIPT
-// DocType: Batches Planned
-// ============================================================
-
 frappe.ui.form.on("Batches Planned", {
 	refresh: function (frm) {
 		frm.page.clear_custom_actions();
 		render_bom_items(frm);
 
-
-		// ── Show buttons only if Approved ──
 		if (frm.doc.workflow_state === "Approved") {
 			frappe.db.get_value(
 				"Slot Opening",
@@ -56,9 +49,6 @@ frappe.ui.form.on("Batches Planned", {
 	},
 });
 
-// ============================================================
-// BOM COMPONENTS TAB
-// ============================================================
 function render_bom_items(frm) {
 	let $field = frm.fields_dict["bom_items"];
 	if (!$field) return;
@@ -219,27 +209,16 @@ function render_bom_table_html(frm, items, bom_name, finished_item, is_edited) {
 	$field.$wrapper.html(html);
 }
 
-
-
-
-
-// ============================================================
-// HELPER FUNCTIONS
-// ============================================================
-
-// Find Matched Row — handles amended_from fallback for suffixes like -1, -2
 function find_matched_row(rows, batch_planning_id, amended_from) {
-	// 1. Exact match
+
 	let matched = rows.find((r) => r.batch_planning_id === batch_planning_id);
 	if (matched) return matched;
 
-	// 2. Match via amended_from (original ID before amendment)
 	if (amended_from) {
 		matched = rows.find((r) => r.batch_planning_id === amended_from);
 		if (matched) return matched;
 	}
 
-	// 3. Match via Base ID (strip trailing -1, -2 etc)
 	let base_id = batch_planning_id.replace(/-\d+$/, "");
 	matched = rows.find((r) => r.batch_planning_id === base_id);
 	if (matched) return matched;

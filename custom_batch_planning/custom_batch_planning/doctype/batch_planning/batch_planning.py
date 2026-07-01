@@ -1,19 +1,10 @@
-# Copyright (c) 2026, Shivam Singh and contributors
-# For license information, please see license.txt
-
 import json
 import frappe
 from frappe.model.document import Document
 from frappe.utils import getdate, flt
 from frappe.model.naming import make_autoname
 
-
-# Toggle to enable/disable after submit logic
 ENABLE_AFTER_SUBMIT_LOGIC = True
-
-# =========================================================
-# MONTH MAP
-# =========================================================
 
 MONTH_MAP = {
     "january": "01",
@@ -29,11 +20,6 @@ MONTH_MAP = {
     "november": "11",
     "december": "12",
 }
-
-
-# =========================================================
-# HELPER — SCT batches_planned increment / decrement
-# =========================================================
 
 def _update_sct_batches_planned(slot_opening_id, slot_booking_date, delta):
     """
@@ -79,11 +65,6 @@ def _update_sct_batches_planned(slot_opening_id, slot_booking_date, delta):
         "Slot Capacity Detail", sct_detail.name, "batches_planned", new_planned
     )
 
-
-# ═══════════════════════════════════════════════
-# PART 1 — API: Get Valid Slot Openings
-# ═══════════════════════════════════════════════
-
 @frappe.whitelist()
 def get_valid_slot_openings(employee_function, current_doc=None):
     """
@@ -117,11 +98,6 @@ def get_valid_slot_openings(employee_function, current_doc=None):
     )
 
     return [r.name for r in valid]
-
-
-# ═══════════════════════════════════════════════
-# PART 2 — API: Get Next Batch Counter
-# ═══════════════════════════════════════════════
 
 @frappe.whitelist()
 def get_next_batch_counter(slot_opening_id, batch_type, exclude_ids=None):
@@ -184,16 +160,7 @@ def get_next_batch_counter(slot_opening_id, batch_type, exclude_ids=None):
 
     return f"{slot_opening_id}-{short_code}-{str(next_num).zfill(2)}"
 
-
-# ═══════════════════════════════════════════════
-# PART 3 — Batch Planning Document Class
-# ═══════════════════════════════════════════════
-
 class BatchPlanning(Document):
-
-    # ─────────────────────────────────────────
-    # AUTONAME
-    # ─────────────────────────────────────────
 
     def autoname(self):
         mm = None
@@ -249,18 +216,12 @@ class BatchPlanning(Document):
 
         self.name = candidate
 
-    # ─────────────────────────────────────────
-    # VALIDATE
-    # ─────────────────────────────────────────
-
     def validate(self):
-        # 1. Employee Function must be selected before Slot Opening
         if self.slot_opening and not self.custom_employee_function:
             frappe.throw(
                 "Please select an Employee Function first before selecting a Slot Opening."
             )
 
-        # Auto-fill read-only fields from slot_opening
         if self.slot_opening:
             slot_opening_data = frappe.db.get_value(
                 "Slot Opening",
@@ -276,7 +237,6 @@ class BatchPlanning(Document):
                     import calendar
                     dt = getdate(batch_start_date)
                     self.month = calendar.month_name[dt.month]
-        # *** New check: ensure only one Batch Planning per Slot Opening ***
         if self.slot_opening:
             existing = frappe.db.get_value(
                 "Batch Planning",
@@ -295,7 +255,6 @@ class BatchPlanning(Document):
                 "function_head_name"
             )
 
-        # 2. Cross-doc duplicate Batch Planning ID check
         for row in self.custom_batch_details or []:
             if row.batch_planning_id:
                 existing_bc = frappe.db.get_value(
@@ -311,7 +270,6 @@ class BatchPlanning(Document):
                         f"Each Batch Planning ID must be unique."
                     )
 
-        # 3. Within-doc duplicate Batch Planning ID check
         seen_ids = []
         for row in self.custom_batch_details or []:
             if row.batch_planning_id:
@@ -322,7 +280,6 @@ class BatchPlanning(Document):
                     )
                 seen_ids.append(row.batch_planning_id)
 
-        # 4. Basic field order checks
         for row in self.custom_batch_details or []:
             if row.finished_item and not row.batch_type:
                 frappe.throw(
@@ -333,7 +290,6 @@ class BatchPlanning(Document):
                     f"Row {row.idx}: Please select a Finished Item before selecting a BOM."
                 )
 
-        # 5. Batch Planning ID fallback auto-generation
         for row in self.custom_batch_details or []:
             if not row.batch_planning_id and row.slot_booking_date:
                 try:
@@ -345,9 +301,7 @@ class BatchPlanning(Document):
                 except Exception:
                     pass
 
-        # 6. Capacity Check: Ensure batches planned per date do not exceed booked capacity on Slot Opening
         if self.slot_opening:
-            # Get the booked capacity per date from the Slot Opening
             booked_slots_data = frappe.get_all(
                 "Slot Booking CT",
                 filters={"parent": self.slot_opening},
@@ -358,7 +312,6 @@ class BatchPlanning(Document):
                 date_key = frappe.utils.getdate(d.slot_booking_date)
                 booked_map[date_key] = booked_map.get(date_key, 0) + (d.booked_slots or 0)
             
-            # Count the batches being created per date in this Batch Planning doc
             planned_map = {}
             for row in self.custom_batch_details or []:
                 if row.slot_booking_date:
@@ -372,10 +325,6 @@ class BatchPlanning(Document):
                         f"Cannot create {count} batches for {d_key}. You only booked "
                         f"{allowed} slot(s) for this date on Slot Opening {self.slot_opening}."
                     )
-
-    # ─────────────────────────────────────────
-    # COMMON METHOD — Create Batches Planned
-    # ─────────────────────────────────────────
 
     def create_batches_planned_records(self):
         count = 0
@@ -426,7 +375,6 @@ class BatchPlanning(Document):
 
             bp.insert(ignore_permissions=True, ignore_mandatory=True)
 
-            # ── SCT batches_planned increment (+1) ──
             _update_sct_batches_planned(
                 row.slot_opening_id, row.slot_booking_date, +1
             )
@@ -447,10 +395,6 @@ class BatchPlanning(Document):
         frappe.db.commit()
         return count
 
-    # ─────────────────────────────────────────
-    # HOOKS
-    # ─────────────────────────────────────────
-
     def on_submit(self):
         if not ENABLE_AFTER_SUBMIT_LOGIC:
             return
@@ -465,13 +409,11 @@ class BatchPlanning(Document):
             fields=["name", "slot_opening_id", "slot_booking_date"],
         )
 
-        # Pehle saare SCT decrements karo
         for bp in bp_list:
             _update_sct_batches_planned(
                 bp.slot_opening_id, bp.slot_booking_date, -1
             )
 
-        # Flag set karo — batches_planned.py ka on_trash dobara -1 na kare
         frappe.flags.skip_sct_decrement = True
         try:
             for bp in bp_list:
@@ -482,13 +424,7 @@ class BatchPlanning(Document):
                     force=True,
                 )
         finally:
-            # Flag hamesha reset karo chahe error aaye ya na aaye
             frappe.flags.skip_sct_decrement = False
-
-
-# ═══════════════════════════════════════════════
-# PART 4 — FRONTEND BUTTON API
-# ═══════════════════════════════════════════════
 
 @frappe.whitelist()
 def create_bulk_material_allocations(batch_planning_name):
@@ -523,10 +459,8 @@ def create_bulk_material_allocations(batch_planning_name):
     if not batches:
         frappe.throw("No Batches Planned found for this Batch Planning.")
 
-    # Gather comma-separated string of Batches Planned names
     batches_planned_str = ", ".join([b.name for b in batches])
 
-    # Get target warehouse for this batch planning (from parent_doc's custom_employee_function)
     if not parent_doc.custom_employee_function:
         frappe.throw("Employee Function is not set on Batch Planning.")
 
@@ -539,12 +473,10 @@ def create_bulk_material_allocations(batch_planning_name):
     if not warehouse:
         frappe.throw(f"No store warehouse found for Employee Function {parent_doc.custom_employee_function}")
 
-    # Combine all BOM items (using get_consolidated_bom_components)
     consolidated_items = get_consolidated_bom_components(batch_planning_name)
     if not consolidated_items:
         frappe.throw("No items found to allocate.")
 
-    # Create one consolidated Material Allocation doc data
     ma_data = {
         "doctype": "Material Allocation",
         "batch_planning": batch_planning_name,
@@ -560,7 +492,6 @@ def create_bulk_material_allocations(batch_planning_name):
         item_code = item["item_code"]
         qty_required = flt(item["qty"])
 
-        # Free stock — no batch planning linked
         free_stock = flt(frappe.db.sql("""
             SELECT IFNULL(SUM(actual_qty), 0)
             FROM `tabStock Ledger Entry`
@@ -570,7 +501,6 @@ def create_bulk_material_allocations(batch_planning_name):
             AND is_cancelled = 0
         """, (item_code, warehouse))[0][0] or 0.0)
 
-        # Stock tagged with this Batch Planning (received via GRN, in main warehouse)
         bp_tagged_stock = flt(frappe.db.sql("""
             SELECT IFNULL(SUM(actual_qty), 0)
             FROM `tabStock Ledger Entry`
@@ -580,7 +510,6 @@ def create_bulk_material_allocations(batch_planning_name):
             AND is_cancelled = 0
         """, (item_code, warehouse, batch_planning_name))[0][0] or 0.0)
 
-        # Total stock available for allocation
         stock_qty = free_stock + bp_tagged_stock
 
         allocated_qty = (
@@ -598,8 +527,6 @@ def create_bulk_material_allocations(batch_planning_name):
             )[0][0]
             or 0
         )
-        # stock_qty already = free_stock + bp_tagged_stock
-        # No need to subtract allocated_qty here — handled at allocation time via get_batches
 
         ma_data["material_allocation"].append({
             "doctype": "Material Allocation Item",
@@ -610,14 +537,11 @@ def create_bulk_material_allocations(batch_planning_name):
             "uom": item["uom"],
             "quantity_required": qty_required,
             "allocate_qty": qty_required,
-            "stock_available": stock_qty  # now = free_stock + bp_tagged_stock
+            "stock_available": stock_qty
         })
     if warning_message:
         ma_data["warning"] = warning_message
     return ma_data
-
-
-# ═══════════════════════════════════════════════
 
 @frappe.whitelist()
 def create_batches_planned(doc_name):
@@ -631,11 +555,6 @@ def create_batches_planned(doc_name):
 
     count = doc.create_batches_planned_records()
     return f"{count} Batches Planned record(s) created successfully."
-
-
-# ═══════════════════════════════════════════════
-# PART 5 — BOM Item Details
-# ═══════════════════════════════════════════════
 
 @frappe.whitelist()
 def get_item_details_for_bom(item_codes):
@@ -652,7 +571,6 @@ def get_item_details_for_bom(item_codes):
         {"items": item_codes},
         as_dict=True,
     )
-
 
 @frappe.whitelist()
 def get_consolidated_bom_components(doc_name):
@@ -697,10 +615,8 @@ def get_consolidated_bom_components(doc_name):
                 }
             components[item_code]["qty"] += qty
 
-    # Convert to sorted list
     sorted_components = sorted(components.values(), key=lambda x: x["item_code"])
     return sorted_components
-
 
 @frappe.whitelist()
 def get_material_planning_data(doc_name):
@@ -711,7 +627,6 @@ def get_material_planning_data(doc_name):
 
     ef_doc = frappe.get_doc("Employee Function", employee_function)
 
-    # Get Main Warehouse from table_bukm
     warehouse = None
     for r in (ef_doc.table_bukm or []):
         if r.store_warehouse:
@@ -721,13 +636,10 @@ def get_material_planning_data(doc_name):
     if not warehouse:
         frappe.throw(f"No store warehouse found in Employee Function '{employee_function}'.")
 
-    # Get Lab Warehouses from table_szrn
     lab_warehouses = [
         r.lab_warehouse for r in (ef_doc.get("table_szrn") or []) if r.lab_warehouse
     ]
 
-    # Pre-build a list of batches with their BOM items
-    # Order: by row index (idx) to deduct greedily batch-by-batch
     batches_data = []
     for row in doc.custom_batch_details or []:
         if not row.bom_list or not row.batch_planning_id:
@@ -762,7 +674,6 @@ def get_material_planning_data(doc_name):
             "items": batch_items
         })
 
-    # Get consolidated items
     consolidated_items = get_consolidated_bom_components(doc_name)
 
     res = []
@@ -772,17 +683,14 @@ def get_material_planning_data(doc_name):
         item_code = item.get("item_code")
         qty_required = flt(item.get("qty"))
 
-        # 1. Main Warehouse Stock (from Bin)
         main_stock = flt(frappe.db.get_value("Bin", {"item_code": item_code, "warehouse": warehouse}, "actual_qty"))
 
-        # 2. Lab Warehouse Stock (from Bin)
         lab_stock = 0.0
         for lab_wh in lab_warehouses:
             lab_stock += flt(frappe.db.get_value("Bin", {"item_code": item_code, "warehouse": lab_wh}, "actual_qty"))
 
         total_stock = main_stock + lab_stock
 
-        # 3. Allocated Quantity (Global for this EF)
         allocated_qty = (
             frappe.db.sql(
                 """
@@ -799,7 +707,6 @@ def get_material_planning_data(doc_name):
             or 0
         )
 
-        # 4. Free Stock Calculation (SLE where batch_planning_id IS NULL)
         free_stock = flt(frappe.db.sql(
             """
             SELECT IFNULL(SUM(actual_qty), 0)
@@ -813,7 +720,6 @@ def get_material_planning_data(doc_name):
         )[0][0] or 0.0)
         free_stock = max(free_stock, 0.0)
 
-        # Stock Available Calculation (free stock + stock tagged with this Batch Planning)
         stock_available = flt(frappe.db.sql(
             """
             SELECT IFNULL(SUM(actual_qty), 0)
@@ -831,9 +737,6 @@ def get_material_planning_data(doc_name):
         )[0][0] or 0.0)
         stock_available = max(stock_available, 0.0)
 
-        # 5. Open MR, PO, GRN details (Global and BP levels)
-        
-        # A. Open MR
         global_mr_qty = flt(frappe.db.sql(
             """
             SELECT IFNULL(SUM(mri.qty - mri.ordered_qty), 0)
@@ -862,7 +765,6 @@ def get_material_planning_data(doc_name):
             (item_code, doc.name)
         )[0][0] or 0.0)
 
-        # B. Open PO
         global_po_qty = flt(frappe.db.sql(
             """
             SELECT IFNULL(SUM(poi.qty - poi.received_qty), 0)
@@ -891,7 +793,6 @@ def get_material_planning_data(doc_name):
             (item_code, doc.name)
         )[0][0] or 0.0)
 
-        # C. Open GRN
         global_grn_qty = flt(frappe.db.sql(
             """
             SELECT IFNULL(SUM(pri.qty - pri.returned_qty), 0)
@@ -920,10 +821,8 @@ def get_material_planning_data(doc_name):
             (item_code, doc.name)
         )[0][0] or 0.0)
 
-        # 6. Consolidated Net Requirement Calculation using BP level quantities only
         net_requirement = max(qty_required - free_stock - bp_mr_qty - bp_po_qty - bp_grn_qty, 0.0)
 
-        # 7. FEFO Batch & Usable Qty
         batch_info = frappe.db.sql(
             """
             SELECT b.expiry_date, SUM(sle.actual_qty) AS actual_qty
@@ -939,7 +838,6 @@ def get_material_planning_data(doc_name):
             as_dict=True,
         )
 
-        # 8. Expired Quantity
         expired_qty = (
             frappe.db.sql(
                 """
@@ -975,7 +873,6 @@ def get_material_planning_data(doc_name):
                 "bp_po_qty": bp_po_qty,
                 "global_grn_qty": global_grn_qty,
                 "bp_grn_qty": bp_grn_qty,
-                # Keep backward compatibility keys
                 "open_pr": round(bp_mr_qty, 2),
                 "open_po": round(bp_po_qty, 2),
                 "open_grn": round(bp_grn_qty, 2),
@@ -994,14 +891,12 @@ def get_material_planning_data(doc_name):
         "warehouse": warehouse
     }
 
-
 @frappe.whitelist()
 def make_material_request(doc_name):
     """Create a consolidated Material Request from Batch Planning, with warehouse auto-filled for each item."""
     doc = frappe.get_doc("Batch Planning", doc_name)
     if not doc.custom_employee_function:
         frappe.throw("Employee Function is not set on this Batch Planning.")
-    # Retrieve main warehouse from Employee Function (table_bukm)
     ef_doc = frappe.get_doc("Employee Function", doc.custom_employee_function)
     warehouse = None
     for r in (ef_doc.table_bukm or []):
@@ -1010,7 +905,6 @@ def make_material_request(doc_name):
             break
     if not warehouse:
         frappe.throw(f"No store warehouse found in Employee Function '{doc.custom_employee_function}'.")
-    # Consolidate items across batches
     items = get_consolidated_bom_components(doc_name)
     if not items:
         frappe.throw("No items found to create Material Request.")
@@ -1034,28 +928,22 @@ def make_material_request(doc_name):
 
 @frappe.whitelist()
 def temp_db_fix():
-    # 1. Drop empty tabBatch Planning table if it exists
     frappe.db.sql("DROP TABLE IF EXISTS `tabBatch Planning`")
-    # 2. Rename tabBatch Creation to tabBatch Planning
     frappe.db.sql("RENAME TABLE `tabBatch Creation` TO `tabBatch Planning`")
-    # 3. Rename batch_creation column to batch_planning in tabBatches Planned
     columns = [c[0] for c in frappe.db.sql("DESC `tabBatches Planned`")]
     if "batch_creation" in columns and "batch_planning" not in columns:
         frappe.db.sql("ALTER TABLE `tabBatches Planned` CHANGE COLUMN `batch_creation` `batch_planning` VARCHAR(255)")
     
-    # 4. Check if renamed doctype options and fields are correct
     return {
         "status": "Fix completed successfully!",
         "tabBatch Planning count": frappe.db.sql("select count(*) from `tabBatch Planning`")[0][0],
         "tabBatches Planned columns": [c[0] for c in frappe.db.sql("DESC `tabBatches Planned`")]
     }
 
-
 @frappe.whitelist()
 def get_batch_wise_shortages(doc_name):
     doc = frappe.get_doc("Batch Planning", doc_name)
     
-    # 1. Sum qty_needed across all batches by item_code
     item_requirements = {}
     for row in doc.custom_batch_details or []:
         if not row.bom_list or not row.batch_planning_id:
@@ -1096,7 +984,6 @@ def get_batch_wise_shortages(doc_name):
 
     shortages = []
     for item_code, req in item_requirements.items():
-        # Query total open MR qty for this item under this Batch Planning
         open_mr_qty = frappe.db.sql("""
             SELECT COALESCE(SUM(mri.qty - mri.ordered_qty), 0)
             FROM `tabMaterial Request Item` mri
@@ -1124,7 +1011,6 @@ def get_batch_wise_shortages(doc_name):
 
     return sorted(shortages, key=lambda x: x["item_code"])
 
-
 @frappe.whitelist()
 def get_project_finished_items(doctype, txt, searchfield, start, page_len, filters):
     project = filters.get("project") if filters else None
@@ -1147,7 +1033,6 @@ def get_project_finished_items(doctype, txt, searchfield, start, page_len, filte
         query += f" LIMIT {int(start)}, {int(page_len)}"
         return frappe.db.sql(query, params, as_dict=False)
     else:
-        # Fallback to all Finish Goods items if no project is specified
         query = """
             SELECT name
             FROM `tabItem`
@@ -1162,10 +1047,6 @@ def get_project_finished_items(doctype, txt, searchfield, start, page_len, filte
         query += f" LIMIT {int(start)}, {int(page_len)}"
         return frappe.db.sql(query, params, as_dict=False)
 
-
-# ═══════════════════════════════════════════════
-# API : Get Stock Entry Items
-# ═══════════════════════════════════════════════
 @frappe.whitelist()
 def get_stock_entry_items(batch_planning):
     """
@@ -1196,10 +1077,6 @@ def get_stock_entry_items(batch_planning):
 
     return list(merged.values())
 
-
-# ═══════════════════════════════════════════════
-# API : Get Item Issue Data (Consolidated Items)
-# ═══════════════════════════════════════════════
 @frappe.whitelist()
 def get_item_issue_data(batch_planning):
     """
@@ -1219,7 +1096,6 @@ def get_item_issue_data(batch_planning):
     if not entries:
         return []
 
-    # Fetch all child items in one query for performance
     se_names = [e.name for e in entries]
     items = frappe.db.sql(
         """
@@ -1240,7 +1116,6 @@ def get_item_issue_data(batch_planning):
         as_dict=True,
     )
 
-    # Merge duplicates by item_code — sum quantities
     merged = {}
     for item in items:
         code = item.item_code
@@ -1256,7 +1131,6 @@ def get_item_issue_data(batch_planning):
                 "t_warehouse": item.t_warehouse,
             }
 
-    # Round quantities for display
     result = []
     for item in merged.values():
         item["qty"] = round(item["qty"], 3)
@@ -1275,13 +1149,11 @@ def on_stock_entry_submit(doc, method):
     if not batch_planning:
         return
 
-    # Check if doc exists
     if not frappe.db.exists("Batch Planning", batch_planning):
         return
 
     bp = frappe.get_doc("Batch Planning", batch_planning)
 
-    # Check if Stock Entry already logged (avoid duplicates on re-submit)
     existing_se = [r.stock_entry for r in (bp.stock_entry_log or [])]
     if doc.name in existing_se:
         return
@@ -1294,7 +1166,6 @@ def on_stock_entry_submit(doc, method):
         "status": "Submitted"
     })
 
-    # Aggregate or add one row per item to item_issue_log
     existing_items = {}
     for r in (bp.item_issue_log or []):
         existing_items[r.item_code] = r

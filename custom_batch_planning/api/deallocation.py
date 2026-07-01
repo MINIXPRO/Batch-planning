@@ -1,12 +1,5 @@
-# Copyright (c) 2026, Shivam Singh and contributors
-# For license information, please see license.txt
-
 import frappe
 
-
-# ═══════════════════════════════════════════════
-# API — Get All Material Allocations
-# ═══════════════════════════════════════════════
 @frappe.whitelist()
 def get_all_material_allocations(employee_function=None):
 
@@ -36,10 +29,6 @@ def get_all_material_allocations(employee_function=None):
 
     return result
 
-
-# ═══════════════════════════════════════════════
-# API — Get Material Allocation Items By Parent
-# ═══════════════════════════════════════════════
 @frappe.whitelist()
 def get_ma_items(ma_names=None):
     if not ma_names:

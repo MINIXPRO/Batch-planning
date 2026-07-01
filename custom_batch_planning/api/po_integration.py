@@ -1,7 +1,6 @@
 import frappe
 from custom_batch_planning.api.pr_integration import consolidate_items_table
 
-
 def validate_purchase_order(doc, method):
     """
     Consolidate identical items (by item_code) and carry the single/multiple
@@ -13,10 +12,8 @@ def validate_purchase_order(doc, method):
     - Item-level batch fields (custom_batch_reference) are NOT written.
     """
 
-    # ── Step 1: Consolidate duplicate item rows and clear custom_batch_reference ──
     consolidate_items_table(doc)
 
-    # ── Step 2: Set parent custom_batch_planning_no from child items or MR if missing ───
     if not doc.get("custom_batch_planning_no"):
         bp_nos = []
         for item in doc.items:
@@ -38,6 +35,5 @@ def validate_purchase_order(doc, method):
                     unique_bp_nos.append(b)
             doc.custom_batch_planning_no = ", ".join(unique_bp_nos)
 
-    # ── Step 3: Recalculate taxes and totals ─────────────────────────────
     if hasattr(doc, "calculate_taxes_and_totals"):
         doc.calculate_taxes_and_totals()

@@ -1,9 +1,8 @@
 import frappe
 
 def run():
-    frappe.flags.in_test = True # sometimes needed to bypass strict validations on creation
+    frappe.flags.in_test = True
     
-    # 1. Batch Planning Stock Entry
     if not frappe.db.exists("DocType", "Batch Planning Stock Entry"):
         doc = frappe.get_doc({
             "doctype": "DocType",
@@ -22,7 +21,6 @@ def run():
         doc.insert()
         print("Created Batch Planning Stock Entry")
 
-    # 2. Batch Planning Item Issue
     if not frappe.db.exists("DocType", "Batch Planning Item Issue"):
         doc = frappe.get_doc({
             "doctype": "DocType",

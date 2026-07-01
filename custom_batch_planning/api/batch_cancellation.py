@@ -1,12 +1,4 @@
-# Copyright (c) 2026, Shivam Singh and contributors
-# For license information, please see license.txt
-
 import frappe
-
-
-# ═══════════════════════════════════════════════
-# API — Get All Batch Plannings
-# ═══════════════════════════════════════════════
 
 @frappe.whitelist()
 def get_all_batch_plannings(employee_function=None):
@@ -40,7 +32,6 @@ def get_all_batch_plannings(employee_function=None):
         bp_names = [r.name for r in result]
         fmt = ",".join(["%s"] * len(bp_names))
 
-        # Build a map from Batches Planned name → Batch Planning parent name
         bp_parent_rows = frappe.db.sql(f"""
             SELECT name, batch_planning
             FROM `tabBatches Planned`
@@ -50,10 +41,6 @@ def get_all_batch_plannings(employee_function=None):
         bp_parents = list(set([v for v in bp_to_parent.values() if v]))
         fmt_parents = ",".join(["%s"] * len(bp_parents)) if bp_parents else None
 
-        # -----------------------------------------
-        # Linked MAs  (by Batches Planned name)
-        # -----------------------------------------
-
         ma_data = frappe.db.sql(f"""
             SELECT batches_planned, COUNT(*) as cnt
             FROM `tabMaterial Allocation`
@@ -62,10 +49,6 @@ def get_all_batch_plannings(employee_function=None):
             GROUP BY batches_planned
         """, bp_names, as_dict=True)
         ma_map = {r.batches_planned: r.cnt for r in ma_data}
-
-        # -----------------------------------------
-        # Linked MRs  (by Batch Planning parent name)
-        # -----------------------------------------
 
         mr_by_parent = {}
         if bp_parents and fmt_parents:
@@ -85,11 +68,6 @@ def get_all_batch_plannings(employee_function=None):
 
     return result
 
-
-# ═══════════════════════════════════════════════
-# API — Cancel Batch Planning With Workflow
-# ═══════════════════════════════════════════════
-
 @frappe.whitelist()
 def bp_cancel_with_workflow(name=None):
 
@@ -98,22 +76,14 @@ def bp_cancel_with_workflow(name=None):
 
     try:
 
-        # -----------------------------------------
-        # Cancel Batches Planned
-        # -----------------------------------------
-
         frappe.db.set_value(
-            "Batches Planned",      # ← fixed from old "Batch Planning"
+            "Batches Planned",
             name,
             {
                 "workflow_state": "Cancelled",
                 "docstatus": 2
             }
         )
-
-        # -----------------------------------------
-        # Cancel linked Material Allocations
-        # -----------------------------------------
 
         linked_mas = frappe.get_all(
             "Material Allocation",
@@ -135,10 +105,6 @@ def bp_cancel_with_workflow(name=None):
                     "allocation_status": "Deallocated"
                 }
             )
-
-        # -----------------------------------------
-        # Cancel linked Material Requests
-        # -----------------------------------------
 
         linked_mrs = frappe.get_all(
             "Material Request",

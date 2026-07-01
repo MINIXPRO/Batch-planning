@@ -1,14 +1,6 @@
-# Copyright (c) 2026, Shivam Singh and contributors
-# For license information, please see license.txt
-
 import frappe
 from frappe.model.document import Document
 from frappe.model.naming import make_autoname
-
-
-# ═══════════════════════════════════════════════
-# PART 1 — API: SCT Details & Calendar Data
-# ═══════════════════════════════════════════════
 
 @frappe.whitelist()
 def get_sct_details(slot_master=None, date=None):
@@ -43,7 +35,6 @@ def get_sct_details(slot_master=None, date=None):
         ],
         ignore_permissions=True
     )
-
 
 @frappe.whitelist()
 def get_calendar_data(employee_function=None, project=None):
@@ -93,16 +84,7 @@ def get_calendar_data(employee_function=None, project=None):
         as_dict=True
     )
 
-
-# ═══════════════════════════════════════════════
-# PART 2 — Slot Opening Controller
-# ═══════════════════════════════════════════════
-
 class SlotOpening(Document):
-
-    # ═══════════════════════════════════════════
-    # AUTONAME
-    # ═══════════════════════════════════════════
 
     def autoname(self):
 
@@ -121,10 +103,6 @@ class SlotOpening(Document):
         self.name = make_autoname(
             f"SO-{yy[2:]}-{mm}-.###"
         )
-
-    # ═══════════════════════════════════════════
-    # BEFORE SAVE
-    # ═══════════════════════════════════════════
 
     def before_save(self):
 
@@ -149,10 +127,6 @@ class SlotOpening(Document):
         self._validate_slot_dates()
 
         self._check_duplicate_full_capacity()
-
-    # ═══════════════════════════════════════════
-    # VALIDATE SLOT DATES
-    # ═══════════════════════════════════════════
 
     def _validate_slot_dates(self):
 
@@ -192,15 +166,10 @@ class SlotOpening(Document):
                     f"Planning End Date <b>{end_date}</b>!"
                 )
 
-    # ═══════════════════════════════════════════
-    # CHECK DUPLICATE FULL CAPACITY
-    # ═══════════════════════════════════════════
-
     def _check_duplicate_full_capacity(self):
         current_dates = [row.slot_booking_date for row in self.slot_booking]
 
         for date in current_dates:
-            # Same slot_master pe same date ka koi aur Slot Opening hai?
             conflict = frappe.db.sql("""
                 SELECT so.name
                 FROM `tabSlot Opening` so
@@ -216,7 +185,6 @@ class SlotOpening(Document):
             if not conflict:
                 continue
 
-            # SCT mein available capacity check karo
             sct_available = frappe.db.sql("""
                 SELECT IFNULL(SUM(scd.capacity_available), 0)
                 FROM `tabSlot Capacity Detail` scd
@@ -225,7 +193,6 @@ class SlotOpening(Document):
                 AND scd.date = %s
             """, (self.slot_master, date))[0][0]
 
-            # Current doc ki booking minus karo (jo abhi save ho rahi hai)
             current_booked = next(
                 (int(r.booked_slots or 0) for r in self.slot_booking
                  if str(r.slot_booking_date) == str(date)), 0
@@ -247,10 +214,6 @@ class SlotOpening(Document):
                     f"for this Employee Function on <b>{date}</b> "
                     f"and capacity is full."
                 )
-
-    # ═══════════════════════════════════════════
-    # UPDATE SCT
-    # ═══════════════════════════════════════════
 
     def _update_sct(self):
 
@@ -297,7 +260,6 @@ class SlotOpening(Document):
                     f"not found in SCT ({sct_name})."
                 )
 
-            # Document is only updating SCT on submit now, so apply the full booked amount
             diff = booked
 
             available = int(sct_detail.capacity_available or 0)
@@ -329,25 +291,13 @@ class SlotOpening(Document):
             indicator="green"
         )
 
-    # ═══════════════════════════════════════════
-    # ON SUBMIT
-    # ═══════════════════════════════════════════
-
     def on_submit(self):
         if getattr(self, "workflow_state", None) == "Approved":
             self._update_sct()
 
-    # ═══════════════════════════════════════════
-    # ON CANCEL
-    # ═══════════════════════════════════════════
-
     def on_cancel(self):
 
         self._reverse_sct()
-
-    # ═══════════════════════════════════════════
-    # ON TRASH
-    # ═══════════════════════════════════════════
 
     def on_trash(self):
 
@@ -361,13 +311,8 @@ class SlotOpening(Document):
                 f"Batch Planning exists for it."
             )
 
-        # Skip reverse steps if the document was already canceled and processed
         if self.docstatus != 2:
             self._reverse_sct()
-
-    # ═══════════════════════════════════════════
-    # REVERSE SCT
-    # ═══════════════════════════════════════════
 
     def _reverse_sct(self):
 
@@ -438,7 +383,6 @@ class SlotOpening(Document):
             indicator="blue"
         )
 
-
 @frappe.whitelist()
 def get_active_slot_masters(doctype, txt, searchfield, start=0, page_len=20, filters=None):
     if isinstance(filters, str):
@@ -463,7 +407,6 @@ def get_active_slot_masters(doctype, txt, searchfield, start=0, page_len=20, fil
     except (ValueError, TypeError):
         page_len = 20
 
-    # Altered date constraint to evaluate against 'batch_end_date' directly
     query = """
         SELECT
             sm.name, sm.employee_function, sm.batch_start_date, sm.batch_end_date

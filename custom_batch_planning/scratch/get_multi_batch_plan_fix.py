@@ -8,15 +8,12 @@ else:
     fmt = ",".join(["%s"] * len(bp_names))
     today = frappe.utils.today()
 
-    # Get warehouse + lab warehouses from Employee Function
     store_warehouse = ""
     lab_warehouses = []
     if employee_function:
         ef_doc = frappe.get_doc("Employee Function", employee_function)
-        # Check if table_bukm exists and has store_warehouse
         if hasattr(ef_doc, 'table_bukm'):
             store_warehouse = next((r.store_warehouse for r in (ef_doc.table_bukm or []) if r.store_warehouse), "")
-        # Fallback to main table if not in child table
         if not store_warehouse:
             store_warehouse = ef_doc.store_warehouse
             
@@ -25,7 +22,6 @@ else:
         if not lab_warehouses and ef_doc.lab_warehouse:
             lab_warehouses = [ef_doc.lab_warehouse]
 
-    # Get BOM items
     bom_items = frappe.db.sql(f"""
         SELECT
             bd.batch_planning_id as bp_name,
@@ -42,7 +38,6 @@ else:
         AND bom.is_active = 1
     """, bp_names, as_dict=True)
 
-    # Get allocated qty from Material Allocation (linked to these BPs)
     allocated = frappe.db.sql(f"""
         SELECT
             ma.batch_planning as bp_name,
@@ -61,7 +56,6 @@ else:
         key = (a.bp_name, a.item_code)
         alloc_map[key] = a.allocated_qty
 
-    # Merge items across BPs
     combined = {}
     for row in bom_items:
         ic = row.item_code
@@ -81,7 +75,6 @@ else:
     for item_code, r in combined.items():
         qty_required = r["required_qty"]
 
-        # Main warehouse stock (Latest SLE)
         main_stock = 0.0
         if store_warehouse:
             main_stock_row = frappe.db.sql("""
@@ -93,7 +86,6 @@ else:
             """, (item_code, store_warehouse))
             main_stock = float(main_stock_row[0][0]) if main_stock_row else 0.0
 
-        # Lab wise stock
         lab_stock = 0.0
         for lab_wh in lab_warehouses:
             lab_row = frappe.db.sql("""
@@ -107,8 +99,6 @@ else:
 
         total_stock = main_stock + lab_stock
 
-        # Global Allocated Qty (across all active Material Allocations)
-        # Using the same logic as batches_planned.py
         allocated_query = """
             SELECT SUM(mai.qty_allocated)
             FROM `tabMaterial Allocation Item` mai
@@ -127,7 +117,6 @@ else:
 
         free_stock = max(total_stock - total_allocated_global, 0)
 
-        # Open Docs
         open_pr = float(frappe.db.sql("""
             SELECT IFNULL(SUM(mri.qty - mri.ordered_qty), 0)
             FROM `tabMaterial Request Item` mri
@@ -151,7 +140,6 @@ else:
               AND pri.returned_qty < pri.qty
         """, (item_code,))[0][0] or 0)
 
-        # Expired qty
         expired_qty = float(frappe.db.sql("""
             SELECT IFNULL(SUM(b.batch_qty), 0)
             FROM `tabBatch` b
@@ -170,7 +158,7 @@ else:
             "item_name": r["item_name"],
             "uom": r["uom"],
             "required_qty": round(qty_required, 2),
-            "allocated_qty": round(r["allocated_qty"], 2), # This is local to selected BPs
+            "allocated_qty": round(r["allocated_qty"], 2),
             "total_stock": round(total_stock, 2),
             "main_stock": round(main_stock, 2),
             "lab_stock": round(lab_stock, 2),

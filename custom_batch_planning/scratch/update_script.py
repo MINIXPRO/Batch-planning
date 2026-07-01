@@ -5,7 +5,6 @@ def update_client_script():
     try:
         doc = frappe.get_doc('Client Script', script_name)
         
-        # New auto_allocate_all function
         new_function = """window.auto_allocate_all = function (frm) {
     let items = frm.doc.material_allocation || [];
     if (!items.length) return;
@@ -75,7 +74,6 @@ def update_client_script():
     });
 };"""
 
-        # Replace the function in the script
         import re
         pattern = r"window\.auto_allocate_all = function \(frm\) \{.*?^\};"
         new_script = re.sub(pattern, new_function, doc.script, flags=re.DOTALL | re.MULTILINE)

@@ -2,12 +2,9 @@ import inspect
 
 def main():
     from erpnext.buying.doctype.purchase_order.purchase_order import PurchaseOrder
-    # Let's inspect all methods of PurchaseOrder class to see if any relates to consolidation
     methods = [m for m in dir(PurchaseOrder) if not m.startswith("__")]
     print("Methods on PurchaseOrder:", methods)
     
-    # Check if there is an onload or before_save or validate consolidation
-    # Let's read source code of validate
     print("\n=== validate source ===")
     print(inspect.getsource(PurchaseOrder.validate))
     

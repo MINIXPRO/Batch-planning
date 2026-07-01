@@ -1,14 +1,9 @@
-# Copyright (c) 2026, Shivam Singh and contributors
-# For license information, please see license.txt
-
 import frappe
-
 
 MONTHS_ORDER = [
     "January", "February", "March", "April", "May", "June",
     "July", "August", "September", "October", "November", "December", "Unknown"
 ]
-
 
 @frappe.whitelist()
 def get_monthly_reconciliation(year=None, month=None, employee_function=None):

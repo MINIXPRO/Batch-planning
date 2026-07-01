@@ -17,13 +17,11 @@ def run():
         
     print(f"Loaded {len(custom_fields)} custom fields from JSON.")
     
-    # Delete obsolete custom fields if they exist
     for field_name in ["Purchase Order Item-custom_batch_reference", "Purchase Invoice-custom_batch_no"]:
         if frappe.db.exists("Custom Field", field_name):
             frappe.delete_doc("Custom Field", field_name, ignore_permissions=True)
             print(f"Deleted obsolete custom field: {field_name}")
         
-    # We want to create/update these custom fields
     for cf in custom_fields:
         if cf.get("doctype") != "Custom Field":
             continue
@@ -32,7 +30,6 @@ def run():
         dt = cf.get("dt")
         fieldname = cf.get("fieldname")
         
-        # Pop modified to avoid timestamp mismatch error
         cf.pop("modified", None)
         
         if frappe.db.exists("Custom Field", name):

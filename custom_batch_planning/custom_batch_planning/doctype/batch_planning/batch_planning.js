@@ -1,18 +1,10 @@
-// ─────────────────────────────────────────────
-// SheetJS load karo (Excel ke liye)
-// ─────────────────────────────────────────────
 if (typeof XLSX === 'undefined') {
     let s = document.createElement('script');
     s.src = 'https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js';
     document.head.appendChild(s);
 }
 
-// ─────────────────────────────────────────────
-// Batch Planning — Main Form
-// ─────────────────────────────────────────────
 frappe.ui.form.on('Batch Planning', {
-
-
 
     refresh: function (frm) {
         if (frm.fields_dict['custom_batch_details']) {
@@ -21,7 +13,7 @@ frappe.ui.form.on('Batch Planning', {
             grid.cannot_delete_rows = true;
         }
         set_project_filter(frm);
-        // ✅ set_query yahan move kiya — setup se hataya
+
         frm.set_query('bom_list', 'custom_batch_details', function (doc, cdt, cdn) {
             let row = locals[cdt][cdn];
             let filters = { docstatus: 1, is_active: 1 };
@@ -66,7 +58,7 @@ frappe.ui.form.on('Batch Planning', {
 
         if (frm.doc.workflow_state === 'Submitted' && !frm.is_new()) {
             frm.add_custom_button('Send For Approval', function () {
-                // future use
+
             }, 'Action');
         }
 
@@ -83,14 +75,14 @@ frappe.ui.form.on('Batch Planning', {
 
         if (frm.doc.docstatus === 1 || frm.doc.workflow_state === 'Approved') {
             render_bom_components_tab(frm);
-            // Load persisted data from localStorage if not already in memory
+
             if (!frm._mp_data) {
                 const stored = localStorage.getItem('mp_' + frm.doc.name);
                 if (stored) {
                     try { frm._mp_data = JSON.parse(stored); } catch(e) { console.error('Failed to parse stored material planning data', e); }
                 }
             }
-            // Render material planning based on available data
+
             if (frm._mp_data && frm._mp_data.length) {
                 render_material_planning_tab(frm);
             } else {
@@ -104,7 +96,6 @@ frappe.ui.form.on('Batch Planning', {
                 render_material_planning_tab(frm);
             }).addClass("btn-primary");
 
-            // Material Allocation button
             frm.remove_custom_button(__("Material Allocation"), __("Create"));
             frm.add_custom_button(__("Material Allocation"), function () {
                 frappe.call({
@@ -149,7 +140,6 @@ frappe.ui.form.on('Batch Planning', {
                 });
             }, __("Create"));
 
-            // Material Request button
             frm.remove_custom_button(__("Material Request"), __("Create"));
             frm.add_custom_button(__("Material Request"), function () {
                 frappe.call({
@@ -305,7 +295,7 @@ frappe.ui.form.on('Batch Planning', {
     },
 
     slot_opening: function (frm) {
-        // 1. Clear fields and tables if the slot_opening field is emptied
+
         if (!frm.doc.slot_opening) {
             frm.set_value('month', '');
             frm.set_value('custom_slot_master', '');
@@ -317,11 +307,9 @@ frappe.ui.form.on('Batch Planning', {
             return;
         }
 
-        // Clear tables immediately to prevent duplicate stacking while loading
         frm.clear_table('slot_opening_table');
         frm.clear_table('custom_batch_details');
 
-        // 2. Fetch data from Slot Opening Doctype
         frappe.call({
             method: 'frappe.client.get',
             args: { doctype: 'Slot Opening', name: frm.doc.slot_opening },
@@ -344,13 +332,11 @@ frappe.ui.form.on('Batch Planning', {
                     promises.push(frm.set_value('project', r.message.project));
                 }
 
-                // WE WAIT until all parent fields are set before touching child tables
                 Promise.all(promises).then(() => {
                     frm._setting_from_slot_opening = false;
 
                     let future_rows = r.message.slot_booking || [];
 
-                    // 3. Handle Empty Bookings Case
                     if (future_rows.length === 0) {
                         frappe.msgprint({
                             title: '⛔ No Slots Found',
@@ -366,13 +352,11 @@ frappe.ui.form.on('Batch Planning', {
                         return;
                     }
 
-                    // 4. Set month field from first booking date
                     if (future_rows[0].slot_booking_date) {
                         let date = new Date(future_rows[0].slot_booking_date);
                         frm.set_value('month', date.toLocaleString('en-US', { month: 'long' }));
                     }
 
-                    // 5. Populate Main Slot Table
                     future_rows.forEach(function (row) {
                         let nr = frm.add_child('slot_opening_table');
                         nr.slot_booking_date = row.slot_booking_date;
@@ -384,7 +368,6 @@ frappe.ui.form.on('Batch Planning', {
                     });
                     frm.refresh_field('slot_opening_table');
 
-                    // 6. Fetch Planned Batches Details
                     frappe.call({
                         method: 'custom_batch_planning.custom_batch_planning.doctype.slot_opening.slot_opening.get_sct_details',
                         args: { slot_master: r.message.slot_master },
@@ -400,7 +383,6 @@ frappe.ui.form.on('Batch Planning', {
                                 sct_map[d.date] = parseInt(d.batches_planned) || 0;
                             });
 
-                            // Populate Custom Batch Details Table
                             future_rows.forEach(function (slot) {
                                 let booked = parseInt(slot.booked_slots) || 0;
                                 let planned = sct_map[slot.slot_booking_date] || 0;
@@ -417,7 +399,6 @@ frappe.ui.form.on('Batch Planning', {
                                 }
                             });
 
-                            // Force layout rendering refresh
                             frm.refresh_field('custom_batch_details');
 
                             frappe.show_alert({
@@ -500,9 +481,6 @@ frappe.ui.form.on('Batch Planning', {
 
 });
 
-// ─────────────────────────────────────────────
-// Batch Planning Detail CT — ALL triggers
-// ─────────────────────────────────────────────
 frappe.ui.form.on('Batch Planning Detail', {
 
     batch_type: function (frm, cdt, cdn) {
@@ -577,16 +555,12 @@ frappe.ui.form.on('Batch Planning Detail', {
 
         open_bom_dialog(frm, cdt, cdn, row.bom_list, row.batch_type);
 
-        // ✅ Delay diya taaki grid pehle render ho jaye
         setTimeout(function () {
             setup_eye_buttons(frm);
         }, 500);
     }
 });
 
-// ─────────────────────────────────────────────
-// BOM Items Dialog — checks store first, fallback to BOM
-// ─────────────────────────────────────────────
 function open_bom_dialog(frm, cdt, cdn, bom_name, batch_type) {
     let locked_states = ['Pending Approval', 'Approved', 'Rejected'];
     let is_readonly = (batch_type === 'Manufacturing') ||
@@ -679,9 +653,6 @@ function open_bom_dialog(frm, cdt, cdn, bom_name, batch_type) {
     });
 }
 
-// ─────────────────────────────────────────────
-// Render Dialog
-// ─────────────────────────────────────────────
 function render_bom_dialog(frm, cdt, cdn, bom_name, batch_type, is_readonly, final_items, existing_doc_name) {
 
     let fields = [];
@@ -900,9 +871,6 @@ function render_bom_dialog(frm, cdt, cdn, bom_name, batch_type, is_readonly, fin
     }
 }
 
-// ─────────────────────────────────────────────
-// Toolbar HTML
-// ─────────────────────────────────────────────
 function get_toolbar_html(checkbox_state) {
     checkbox_state = checkbox_state || {};
     return `
@@ -934,9 +902,6 @@ function get_toolbar_html(checkbox_state) {
     `;
 }
 
-// ─────────────────────────────────────────────
-// Table HTML
-// ─────────────────────────────────────────────
 function get_table_html(items, is_readonly) {
     let rows = '';
 
@@ -987,9 +952,6 @@ function get_table_html(items, is_readonly) {
     `;
 }
 
-// ─────────────────────────────────────────────
-// Single Row HTML
-// ─────────────────────────────────────────────
 function make_row(idx, item_code, item_name, qty, uom, is_readonly) {
     if (is_readonly) {
         return `
@@ -1028,9 +990,6 @@ function make_row(idx, item_code, item_name, qty, uom, is_readonly) {
         </tr>`;
 }
 
-// ─────────────────────────────────────────────
-// Bind Dialog Events
-// ─────────────────────────────────────────────
 function bind_dialog_events(d) {
     let $w = d.$wrapper;
 
@@ -1087,9 +1046,6 @@ function bind_dialog_events(d) {
     });
 }
 
-// ─────────────────────────────────────────────
-// Collect Table Data
-// ─────────────────────────────────────────────
 function collect_table_data(d) {
     let items = [];
     let error = null;
@@ -1118,9 +1074,6 @@ function collect_table_data(d) {
     return items;
 }
 
-// ─────────────────────────────────────────────
-// Renumber + Row Count
-// ─────────────────────────────────────────────
 function renumber_rows($w) {
     $w.find('#bom_edit_tbody tr:not(#empty_row)').each(function (i) {
         $(this).find('td:first').text(i + 1);
@@ -1132,9 +1085,6 @@ function update_row_count($w) {
     $w.find('#row_count').text(count + ' rows');
 }
 
-// ─────────────────────────────────────────────
-// Excel Upload
-// ─────────────────────────────────────────────
 function handle_excel_upload(file, $w, callback) {
     if (typeof XLSX === 'undefined') {
         frappe.msgprint('⚠️ Excel library not loaded yet. Please try again in a moment.');
@@ -1191,9 +1141,6 @@ function handle_excel_upload(file, $w, callback) {
     reader.readAsArrayBuffer(file);
 }
 
-// ─────────────────────────────────────────────
-// Download Excel Template
-// ─────────────────────────────────────────────
 function download_template() {
     if (typeof XLSX === 'undefined') {
         frappe.msgprint('⚠️ Excel library not loaded yet. Please try again.');
@@ -1210,9 +1157,6 @@ function download_template() {
     XLSX.writeFile(wb, 'BOM_Items_Template.xlsx');
 }
 
-// ─────────────────────────────────────────────
-// Load Valid Slots & re-apply set_query
-// ─────────────────────────────────────────────
 function load_used_slots(frm) {
     if (!frm.doc.custom_employee_function) return;
 
@@ -1235,25 +1179,19 @@ function load_used_slots(frm) {
     });
 }
 
-// ─────────────────────────────────────────────
-// Eye Button Setup — with all guards
-// ─────────────────────────────────────────────
 function setup_eye_buttons(frm) {
-    // ✅ Observer pehle disconnect karo
+
     if (frm._bom_observer) {
         frm._bom_observer.disconnect();
         frm._bom_observer = null;
     }
 
-    // ✅ Guard 1: fields_dict ready nahi hai
     if (!frm.fields_dict || !frm.fields_dict['custom_batch_details']) return;
 
     let grid = frm.fields_dict['custom_batch_details'].grid;
 
-    // ✅ Guard 2: grid ya wrapper ready nahi hai
     if (!grid || !grid.wrapper) return;
 
-    // ✅ Guard 3: doc ya rows ready nahi hain
     if (!frm.doc || !frm.doc.custom_batch_details) return;
 
     grid.cannot_add_rows = true;
@@ -1276,9 +1214,6 @@ function setup_eye_buttons(frm) {
     frm._bom_observer.observe($grid_wrapper[0], { childList: true, subtree: true });
 }
 
-// ─────────────────────────────────────────────
-// Inject Eye Button — ONE per row, no duplicates
-// ─────────────────────────────────────────────
 function inject_eye_buttons_once(frm, $grid_wrapper) {
     $grid_wrapper.find('.grid-row').each(function () {
         let $row = $(this);
@@ -1456,7 +1391,7 @@ function render_material_planning_tab(frm) {
 
             let rows_html = data.map((row, i) => {
                 let bg = i % 2 === 0 ? "#f9fafb" : "#ffffff";
-                
+
                 let mr_qty_sum = parseFloat(row.global_mr_qty || 0) + parseFloat(row.bp_mr_qty || 0);
                 let po_qty_sum = parseFloat(row.global_po_qty || 0) + parseFloat(row.bp_po_qty || 0);
                 let grn_qty_sum = parseFloat(row.global_grn_qty || 0) + parseFloat(row.bp_grn_qty || 0);
@@ -1659,7 +1594,7 @@ function render_stock_entry_tab(frm) {
 
 window.show_item_stock_entries = function(item_code) {
     if (!window._item_issue_entries || !window._item_issue_entries[item_code]) return;
-    
+
     let entries = window._item_issue_entries[item_code];
     let rows = entries.map(e => `
         <tr>
@@ -1669,12 +1604,12 @@ window.show_item_stock_entries = function(item_code) {
             <td>${e.to_warehouse || ''}</td>
         </tr>
     `).join("");
-    
+
     let d = new frappe.ui.Dialog({
         title: `Stock Entries for ${item_code}`,
         size: "large",
     });
-    
+
     d.body.innerHTML = `
         <table class="table table-bordered">
             <thead style="background:#f1f5f9; color:#333;">
@@ -1696,14 +1631,14 @@ window.show_item_stock_entries = function(item_code) {
 function render_item_issue_tab(frm) {
     let rows = frm.doc.item_issue_log || [];
     let html = '';
-    
+
     if (!rows.length) {
         html = '<p style="padding: 20px; text-align: center; color: #6b7280; border: 2px dashed #e5e7eb; border-radius: 8px; margin-top: 15px;">No Items Issued Yet</p>';
     } else {
-        // Consolidate data
+
         let item_map = {};
         window._item_issue_entries = {};
-        
+
         rows.forEach(r => {
             if (!item_map[r.item_code]) {
                 item_map[r.item_code] = {
@@ -1715,7 +1650,7 @@ function render_item_issue_tab(frm) {
                 window._item_issue_entries[r.item_code] = [];
             }
             item_map[r.item_code].qty += flt(r.qty);
-            
+
             window._item_issue_entries[r.item_code].push({
                 stock_entry: r.stock_entry,
                 qty: flt(r.qty),
@@ -1733,12 +1668,12 @@ function render_item_issue_tab(frm) {
                 <th style="padding:8px 12px;">UOM</th>
                 <th style="padding:8px 12px;">Stock Entries</th>
             </tr></thead><tbody>`;
-            
+
         let index = 1;
         for (let item_code in item_map) {
             let r = item_map[item_code];
             let entries_count = window._item_issue_entries[item_code].length;
-            
+
             html += `<tr>
                 <td style="padding:8px 12px;">${index++}</td>
                 <td style="padding:8px 12px; font-weight:bold;">${r.item_code}</td>
@@ -1750,7 +1685,7 @@ function render_item_issue_tab(frm) {
         }
         html += '</tbody></table>';
     }
-    
+
     if (frm.fields_dict["item_issue_details"] && frm.fields_dict["item_issue_details"].$wrapper) {
         frm.fields_dict["item_issue_details"].$wrapper.html(html);
     }

@@ -3,16 +3,13 @@ data = frappe.request.get_json() or {}
 employee_function = data.get("employee_function") or ""
 month = data.get("month") or ""
 
-# Check if user is Administrator
 is_admin = frappe.session.user == "Administrator"
 
 filters = []
 
-# If not admin, EF is mandatory
 if not is_admin and not employee_function:
     frappe.response["message"] = []
 else:
-    # If EF provided (by admin or user), use it as filter
     if employee_function:
         filters.append(["employee_function", "=", employee_function])
 

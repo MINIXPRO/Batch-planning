@@ -1,11 +1,7 @@
-# Copyright (c) 2026, Shivam Singh and contributors
-# For license information, please see license.txt
-
 import frappe
 import json
 from frappe.model.document import Document
 from frappe.utils import flt, getdate, today, now
-
 
 class MaterialAllocation(Document):
 
@@ -27,10 +23,6 @@ class MaterialAllocation(Document):
                 frappe.throw(
                     f"Row #{item.idx}: Reason is mandatory because Qty Requested ({qty_requested}) differs from Consolidated BOM Qty ({bom_qty}) for item {item.item_code}."
                 )
-
-    # ═══════════════════════════════════════════════
-    # PART 1 — AUTO ALLOCATION LOGIC
-    # ═══════════════════════════════════════════════
 
     @frappe.whitelist()
     def auto_allocate(self):
@@ -59,10 +51,8 @@ class MaterialAllocation(Document):
             if qty_needed <= 0:
                 continue
 
-            # Fetch latest stock available (from Bin)
             item.stock_available = flt(frappe.db.get_value("Bin", {"item_code": item.item_code, "warehouse": warehouse}, "actual_qty"))
 
-            # FEFO Batch Allocation
             batches = self.get_batches(item.item_code, warehouse)
             total_allocated = 0
 
@@ -83,7 +73,6 @@ class MaterialAllocation(Document):
                 })
                 total_allocated += allocate_qty
 
-            # Non-batch fallback
             if total_allocated == 0 and flt(item.stock_available) >= qty_needed:
                 total_allocated = qty_needed
 
@@ -99,7 +88,6 @@ class MaterialAllocation(Document):
         for item in self.material_allocation:
             item.db_update()
 
-        # Log the allocation action
         self.save_allocation_log("Allocated")
 
         return True
@@ -131,14 +119,9 @@ class MaterialAllocation(Document):
 
         self.save()
 
-        # Log the deallocation action
         self.save_allocation_log("Deallocated")
 
         return True
-
-    # ═══════════════════════════════════════════════
-    # PART 2 — UTILITIES & LOGGING
-    # ═══════════════════════════════════════════════
 
     def save_allocation_log(self, status):
         """Logs the allocation/deallocation activity to 'Material Allocation Log'."""
@@ -157,7 +140,6 @@ class MaterialAllocation(Document):
             log.project_id = self.project_id
             log.project_name = self.project_name
 
-        # ── Table 1: Audit trail — one row per item per event
         for item in self.material_allocation:
             log.append("table", {
                 "allocated_by": frappe.session.user,
@@ -168,7 +150,6 @@ class MaterialAllocation(Document):
                 "qty_allocated": item.qty_allocated if status == "Allocated" else 0,
             })
 
-        # ── Table 2: MA Logs — Incremental updates
         existing_items = {}
         for r in (log.ma_logs or []):
             existing_items[r.item_code] = r
@@ -199,7 +180,6 @@ class MaterialAllocation(Document):
                 if item.item_code in existing_items:
                     existing_items[item.item_code].qty_allocated -= flt(item.allocate_qty)
                     existing_items[item.item_code].allocate_qty -= flt(item.allocate_qty)
-                    # prevent negative quantities
                     if existing_items[item.item_code].qty_allocated < 0:
                         existing_items[item.item_code].qty_allocated = 0
                     if existing_items[item.item_code].allocate_qty < 0:
@@ -259,11 +239,6 @@ class MaterialAllocation(Document):
             ORDER BY b.expiry_date ASC
         """, (self.name, item_code, warehouse, self.name), as_dict=True)
 
-
-# ═══════════════════════════════════════════════
-# PART 3 — API TOOLS
-# ═══════════════════════════════════════════════
-
 @frappe.whitelist()
 def ma_get_allocated_qty(item_code, employee_function, exclude_parent=None, row_name=None):
     warehouse = None
@@ -276,10 +251,8 @@ def ma_get_allocated_qty(item_code, employee_function, exclude_parent=None, row_
     if not warehouse:
         return {"free_stock": 0, "allocated_qty": 0}
 
-    # Fetch latest stock available (from Bin)
     total_stock = flt(frappe.db.get_value("Bin", {"item_code": item_code, "warehouse": warehouse}, "actual_qty"))
 
-    # FIX: Exclude both 'Deallocated' AND 'Stock Entry Done' from allocated qty calculation
     query = """
         SELECT SUM(mai.qty_allocated)
         FROM `tabMaterial Allocation Item` mai
@@ -299,7 +272,6 @@ def ma_get_allocated_qty(item_code, employee_function, exclude_parent=None, row_
         "free_stock": total_stock - allocated_qty,
         "allocated_qty": allocated_qty,
     }
-
 
 @frappe.whitelist()
 def get_open_pr_po(item_codes):
@@ -328,7 +300,6 @@ def get_open_pr_po(item_codes):
         }
 
     return result
-
 
 @frappe.whitelist(allow_guest=True)
 def get_item_batch_expiry(item_codes):
@@ -370,7 +341,6 @@ def get_item_batch_expiry(item_codes):
             }
 
     return result
-
 
 @frappe.whitelist()
 def on_stock_entry_submit(stock_entry_name):

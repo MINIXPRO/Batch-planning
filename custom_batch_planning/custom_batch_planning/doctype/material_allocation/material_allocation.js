@@ -13,10 +13,9 @@ frappe.ui.form.on("Material Allocation", {
 
     refresh: function (frm) {
         console.log("🔄 Material Allocation refreshed for:", frm.doc.name);
-        
+
         frm.clear_custom_buttons();
 
-        // ── Auto-load BOM items if new/draft and table is empty ──
         let is_empty = !frm.doc.material_allocation || frm.doc.material_allocation.length === 0;
         if (
             (frm.is_new() || frm.doc.workflow_state === "Draft") &&
@@ -32,13 +31,11 @@ frappe.ui.form.on("Material Allocation", {
             }, 500);
         }
 
-        // ── Lock header fields outside Draft ──
         if (!frm.is_new() && frm.doc.workflow_state !== "Draft") {
             frm.set_df_property("employee_function", "read_only", 1);
             frm.set_df_property("batch_planning", "read_only", 1);
         }
 
-        // ── Grid: allow add rows; allow delete but enforce min 1 row ──
         frm.set_df_property("material_allocation", "cannot_add_rows", false);
         frm.set_df_property("material_allocation", "cannot_delete_rows", false);
         if (frm.fields_dict["material_allocation"] && frm.fields_dict["material_allocation"].grid) {
@@ -46,9 +43,8 @@ frappe.ui.form.on("Material Allocation", {
             frm.fields_dict["material_allocation"].grid.df.cannot_delete_rows = false;
         }
 
-        // ── Grid: lock all cols, only allocate_qty + reason editable ──
         if (frm.doc.allocation_status) {
-            // Fully locked once allocated/deallocated
+
             frm.set_df_property("material_allocation", "read_only", 1);
             frm.refresh_field("material_allocation");
         } else {
@@ -63,7 +59,7 @@ frappe.ui.form.on("Material Allocation", {
                         fieldname, "read_only", 1
                     );
                 } catch (e) {
-                    // Ignore missing fields like batch_details
+
                 }
             });
             try {
@@ -74,11 +70,10 @@ frappe.ui.form.on("Material Allocation", {
                     "reason", "read_only", 0
                 );
             } catch (e) {}
-            
+
             frm.refresh_field("material_allocation");
         }
 
-        // ── Refresh stock available for non-allocated docs ──
         if (
             !frm.is_new() &&
             frm.doc.employee_function &&
@@ -92,7 +87,6 @@ frappe.ui.form.on("Material Allocation", {
             }
         }
 
-        // ── View Allocations Button (visible on any doc with batch_planning) ──
         if (frm.doc.batch_planning) {
             setTimeout(function () {
                 frm.add_custom_button(__("View Allocations"), function () {
@@ -106,7 +100,7 @@ frappe.ui.form.on("Material Allocation", {
                             let data = r.message || {};
                             let items = data.items || [];
                             let ma_count = data.ma_count || 0;
-                            
+
                             if (!items.length) {
                                 frappe.msgprint({
                                     title: "No Allocations",
@@ -115,7 +109,7 @@ frappe.ui.form.on("Material Allocation", {
                                 });
                                 return;
                             }
-                            
+
                             let rows = items.map(d => {
                                 let row_style = "";
                                 if (d.qty_allocated > d.quantity_required) {
@@ -131,7 +125,7 @@ frappe.ui.form.on("Material Allocation", {
                                 </tr>
                                 `;
                             }).join("");
-                            
+
                             let d_dialog = new frappe.ui.Dialog({
                                 title: "Allocated Items",
                                 size: "large",
@@ -160,7 +154,6 @@ frappe.ui.form.on("Material Allocation", {
             }, 100);
         }
 
-        // ── Action Buttons ──
         setTimeout(function () {
             if (!frm.is_new() && frm.doc.workflow_state === "Approved" && frm.doc.docstatus !== 2) {
                 if (!frm.doc.allocation_status) {
@@ -170,7 +163,7 @@ frappe.ui.form.on("Material Allocation", {
                     ).addClass("btn-primary");
 
                 } else if (frm.doc.allocation_status === "Allocated") {
-                    // Check if Stock Entry exists
+
                     frappe.call({
                         method: "frappe.client.get_list",
                         args: {
@@ -227,7 +220,6 @@ frappe.ui.form.on("Material Allocation", {
 
         window.load_expiry_status(frm);
 
-        // ── Highlight rows where allocate_qty differs from quantity_required ──
         setTimeout(function () {
             (frm.doc.material_allocation || []).forEach(function (row) {
                 if (row.reason && row.allocate_qty != row.quantity_required) {
@@ -240,8 +232,6 @@ frappe.ui.form.on("Material Allocation", {
             });
         }, 1000);
     },
-
-    // ── No validate on client side — handled by server script ──
 
     after_save: function (frm) {
         if (frm._allocating) return;
@@ -268,12 +258,8 @@ frappe.ui.form.on("Material Allocation", {
         }
     },
 
-    // ── No batch_planning trigger — MA is created only via batch_planning ──
 });
 
-// ============================================================
-// 2. CHILD TABLE EVENTS (Material Allocation Item)
-// ============================================================
 frappe.ui.form.on("Material Allocation Item", {
     allocate_qty: function (frm, cdt, cdn) {
         let row = locals[cdt][cdn];
@@ -286,7 +272,7 @@ frappe.ui.form.on("Material Allocation Item", {
     },
 
     before_material_allocation_remove: function (frm, cdt, cdn) {
-        // Enforce minimum 1 row
+
         if ((frm.doc.material_allocation || []).length <= 1) {
             frappe.msgprint({
                 title: __("Cannot Delete"),
@@ -297,10 +283,6 @@ frappe.ui.form.on("Material Allocation Item", {
         }
     },
 });
-
-// ============================================================
-// 3. GLOBAL HELPER FUNCTIONS
-// ============================================================
 
 window._show_item_history = function (item_code) {
     let filtered = (window._ma_history_data || [])
@@ -426,7 +408,7 @@ window.auto_allocate_all = function (frm) {
 };
 
 window.deallocate_all = function (frm) {
-    // Block if submitted Stock Entry exists
+
     frappe.call({
         method: "frappe.client.get_list",
         args: {
@@ -499,7 +481,7 @@ window.create_stock_entry = function (frm) {
             frappe.confirm(
                 "⚠️ This will create a <b>Stock Entry (Material Transfer)</b> with all allocated items. Continue?",
                 function () {
-                    // Step 1: Get Employee Function warehouse
+
                     frappe.call({
                         method: "frappe.client.get",
                         args: { doctype: "Employee Function", name: frm.doc.employee_function },
@@ -517,7 +499,6 @@ window.create_stock_entry = function (frm) {
                         return;
                     }
 
-                    // Step 2: Get BOM from Batch Planning
                     frappe.call({
                         method: "frappe.client.get",
                         args: { doctype: "Batch Planning", name: frm.doc.batch_planning },
@@ -526,7 +507,6 @@ window.create_stock_entry = function (frm) {
                             let matched = rows.find(r => r.bom_list);
                             let bom_no = matched ? matched.bom_list : null;
 
-                            // Step 3: Build items from MA child table
                             let items = (frm.doc.material_allocation || []).map(row => ({
                                 item_code: row.item_code,
                                 item_name: row.item_name,
@@ -540,7 +520,6 @@ window.create_stock_entry = function (frm) {
                             let batch_list = (frm.doc.batches_planned || "").split(",").map(s => s.trim());
                             let first_batch = batch_list[0] || "";
 
-                            // Step 4: Open new Stock Entry prefilled
                             frappe.new_doc("Stock Entry", {
                                 stock_entry_type: "Material Transfer",
                                 custom_batch_planning: frm.doc.batches_planned,
@@ -573,14 +552,14 @@ window.create_stock_entry = function (frm) {
                                 }
                             });
 
-                        } // end callback bc_res
-                    }); // end call bc_res
-                } // end callback ef_res
-            }); // end call ef_res
-        } // end confirm callback
-    ); // end confirm
-        } // end callback r
-    }); // end call r
+                        }
+                    });
+                }
+            });
+        }
+    );
+        }
+    });
 };
 
 window.load_expiry_status = function (frm) {
@@ -660,7 +639,6 @@ window.upload_bom_items = function (frm) {
             });
             frm.refresh_field("material_allocation");
 
-            // Set batches_planned field
             frappe.call({
                 method: "frappe.client.get_list",
                 args: {
@@ -676,7 +654,6 @@ window.upload_bom_items = function (frm) {
                 },
             });
 
-            // Refresh stock available after BOM load
             setTimeout(function () {
                 window.refresh_stock_available(frm);
             }, 1000);

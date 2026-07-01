@@ -1,7 +1,6 @@
 import frappe
 
 def run():
-    # find latest PO
     po_list = frappe.get_all(
         "Purchase Order",
         order_by="creation desc",

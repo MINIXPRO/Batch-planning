@@ -1,31 +1,20 @@
-# Copyright (c) 2026, Shivam Singh and contributors
-# For license information, please see license.txt
-
 import json
 import frappe
 from frappe.model.document import Document
 from frappe.utils import flt, today
 
-
-# ═══════════════════════════════════════════════
-# Batches Planned
-# ═══════════════════════════════════════════════
 class BatchesPlanned(Document):
 
     def on_trash(self):
-        # 1. Prevent delete if Material Allocation exists
         if frappe.db.exists("Material Allocation", {"batches_planned": self.name}):
             frappe.throw(
                 f"Cannot delete Batches Planned <b>{self.name}</b>. "
                 f"Material Allocation exists for it."
             )
 
-        # 2. Skip SCT decrement if called from Batch Planning on_trash
-        #    (Batch Planning on_trash already handles decrement before delete)
         if frappe.flags.get("skip_sct_decrement"):
             return
 
-        # 3. ── SCT batches_planned decrement (-1) ──
         if self.slot_opening_id and self.slot_booking_date:
             slot_master = frappe.db.get_value(
                 "Slot Opening", self.slot_opening_id, "slot_master"
@@ -54,10 +43,6 @@ class BatchesPlanned(Document):
                             new_planned,
                         )
 
-
-# ═══════════════════════════════════════════════
-# API : Get Material Planning Data
-# ═══════════════════════════════════════════════
 @frappe.whitelist()
 def get_material_planning_data(items, warehouse, batch_planning, employee_function):
     if isinstance(items, str):
@@ -66,7 +51,6 @@ def get_material_planning_data(items, warehouse, batch_planning, employee_functi
     res = []
     curr_today = today()
 
-    # Get Lab Warehouses from Employee Function
     ef_doc = frappe.get_doc("Employee Function", employee_function)
     lab_warehouses = [
         r.lab_warehouse for r in (ef_doc.get("table_szrn") or []) if r.lab_warehouse
@@ -76,17 +60,14 @@ def get_material_planning_data(items, warehouse, batch_planning, employee_functi
         item_code = item.get("item_code")
         qty_required = flt(item.get("qty_required"))
 
-        # 1. Main Warehouse Stock (from Bin)
         main_stock = flt(frappe.db.get_value("Bin", {"item_code": item_code, "warehouse": warehouse}, "actual_qty"))
 
-        # 2. Lab Warehouse Stock (from Bin)
         lab_stock = 0.0
         for lab_wh in lab_warehouses:
             lab_stock += flt(frappe.db.get_value("Bin", {"item_code": item_code, "warehouse": lab_wh}, "actual_qty"))
 
         total_stock = main_stock + lab_stock
 
-        # 3. Allocated Quantity (Global for this EF)
         allocated_qty = (
             frappe.db.sql("""
                 SELECT IFNULL(SUM(mai.allocate_qty), 0)
@@ -99,7 +80,6 @@ def get_material_planning_data(items, warehouse, batch_planning, employee_functi
             """, (item_code, employee_function))[0][0] or 0
         )
 
-        # 4. Free Stock — only untagged stock (no batch_planning_id)
         free_stock = flt(
             frappe.db.sql("""
                 SELECT IFNULL(SUM(actual_qty), 0)
@@ -111,7 +91,6 @@ def get_material_planning_data(items, warehouse, batch_planning, employee_functi
             """, (item_code, warehouse))[0][0] or 0
         )
 
-        # 5. Stock tagged with this Batch Planning (received via GRN, in main warehouse)
         bp_tagged_stock = flt(
             frappe.db.sql("""
                 SELECT IFNULL(SUM(actual_qty), 0)
@@ -123,10 +102,8 @@ def get_material_planning_data(items, warehouse, batch_planning, employee_functi
             """, (item_code, warehouse, batch_planning))[0][0] or 0
         )
 
-        # stock_available for allocation = free stock + BP tagged stock
         stock_available = free_stock + bp_tagged_stock
 
-        # 6. Open MR — BP level (for net requirement)
         bp_mr_qty = flt(
             frappe.db.sql("""
                 SELECT IFNULL(SUM(mri.qty - mri.ordered_qty), 0)
@@ -140,7 +117,6 @@ def get_material_planning_data(items, warehouse, batch_planning, employee_functi
             """, (item_code, batch_planning))[0][0] or 0
         )
 
-        # 7. Open MR — Global EF level (for display)
         global_mr_qty = flt(
             frappe.db.sql("""
                 SELECT IFNULL(SUM(mri.qty - mri.ordered_qty), 0)
@@ -154,7 +130,6 @@ def get_material_planning_data(items, warehouse, batch_planning, employee_functi
             """, (item_code, employee_function))[0][0] or 0
         )
 
-        # 8. Open PO — BP level (for net requirement)
         bp_po_qty = flt(
             frappe.db.sql("""
                 SELECT IFNULL(SUM(poi.qty - poi.received_qty), 0)
@@ -168,7 +143,6 @@ def get_material_planning_data(items, warehouse, batch_planning, employee_functi
             """, (item_code, batch_planning))[0][0] or 0
         )
 
-        # 9. Open PO — Global EF level (for display)
         global_po_qty = flt(
             frappe.db.sql("""
                 SELECT IFNULL(SUM(poi.qty - poi.received_qty), 0)
@@ -182,7 +156,6 @@ def get_material_planning_data(items, warehouse, batch_planning, employee_functi
             """, (item_code, employee_function))[0][0] or 0
         )
 
-        # 10. Open GRN — BP level (for net requirement)
         bp_grn_qty = flt(
             frappe.db.sql("""
                 SELECT IFNULL(SUM(pri.qty - pri.returned_qty), 0)
@@ -196,7 +169,6 @@ def get_material_planning_data(items, warehouse, batch_planning, employee_functi
             """, (item_code, batch_planning))[0][0] or 0
         )
 
-        # 11. Open GRN — Global EF level (for display)
         global_grn_qty = flt(
             frappe.db.sql("""
                 SELECT IFNULL(SUM(pri.qty - pri.returned_qty), 0)
@@ -210,12 +182,10 @@ def get_material_planning_data(items, warehouse, batch_planning, employee_functi
             """, (item_code, employee_function))[0][0] or 0
         )
 
-        # 12. Net Requirement — BP level only
         net_requirement = max(
             qty_required - (free_stock + bp_mr_qty + bp_po_qty + bp_grn_qty), 0
         )
 
-        # 13. FEFO Batch & Usable Qty
         batch_info = frappe.db.sql("""
             SELECT b.expiry_date, SUM(sle.actual_qty) AS actual_qty
             FROM `tabStock Ledger Entry` sle
@@ -227,7 +197,6 @@ def get_material_planning_data(items, warehouse, batch_planning, employee_functi
             ORDER BY b.expiry_date ASC LIMIT 1
         """, (item_code, curr_today), as_dict=True)
 
-        # 14. Expired Quantity
         expired_qty = (
             frappe.db.sql("""
                 SELECT IFNULL(SUM(sle.actual_qty), 0)
@@ -252,17 +221,13 @@ def get_material_planning_data(items, warehouse, batch_planning, employee_functi
             "free_stock": round(free_stock, 2),
             "stock_available": round(stock_available, 2),
             "bp_tagged_stock": round(bp_tagged_stock, 2),
-            # BP level (for net requirement)
             "bp_mr_qty": round(bp_mr_qty, 2),
             "bp_po_qty": round(bp_po_qty, 2),
             "bp_grn_qty": round(bp_grn_qty, 2),
-            # Global EF level (for display)
             "global_mr_qty": round(global_mr_qty, 2),
             "global_po_qty": round(global_po_qty, 2),
             "global_grn_qty": round(global_grn_qty, 2),
-            # Net requirement
             "net_requirement": round(net_requirement, 2),
-            # Batch info
             "usable_qty": round(usable_qty, 2),
             "expired_qty": round(flt(expired_qty), 2),
             "expiry_date": expiry_date,
@@ -270,9 +235,6 @@ def get_material_planning_data(items, warehouse, batch_planning, employee_functi
 
     return res
 
-# ═══════════════════════════════════════════════
-# API : Get BOM Items for MA
-# ═══════════════════════════════════════════════
 @frappe.whitelist()
 def get_bom_items_for_ma(batch_planning):
     bp = frappe.get_doc("Batches Planned", batch_planning)
@@ -301,7 +263,6 @@ def get_bom_items_for_ma(batch_planning):
     use_store = False
     items = []
 
-    # Process Development / Machine Trial check
     if matched.batch_type in ("Process Development", "Machine Trial"):
         bom_store = frappe.db.get_value(
             "Batch BOM Store after Edit", {"batch_id": batch_key}, "name"
@@ -315,7 +276,6 @@ def get_bom_items_for_ma(batch_planning):
         bom = frappe.get_doc("BOM", matched.bom_list)
         items = bom.exploded_items or bom.items or []
 
-    # Get Warehouse
     ef = frappe.get_doc("Employee Function", bp.employee_function)
     warehouse = next(
         (r.store_warehouse for r in (ef.table_bukm or []) if r.store_warehouse),
@@ -332,11 +292,8 @@ def get_bom_items_for_ma(batch_planning):
         uom = item.uom if use_store else (item.stock_uom or item.uom)
         item_code = item.item_code
 
-        # Main Stock (from Bin)
         main_stock = flt(frappe.db.get_value("Bin", {"item_code": item_code, "warehouse": warehouse}, "actual_qty"))
 
-        # Allocated Qty
-        # FIX: Exclude both 'Deallocated' AND 'Stock Entry Done'
         allocated_qty = (
             frappe.db.sql(
                 """

@@ -1,14 +1,3 @@
-// ═════════════════════════════════════════════════════════════════════════════
-// Slot Opening — Complete Client Script
-// Author  : Shivam Singh & contributors
-// Purpose : Handles all form logic for Slot Opening doctype
-//           → Field triggers, validations, capacity tracking, calendar
-// ═════════════════════════════════════════════════════════════════════════════
-
-// ─────────────────────────────────────────────────────────────────────────────
-// SECTION 1 — Main Form Events
-// ─────────────────────────────────────────────────────────────────────────────
-
 frappe.ui.form.on("Slot Opening", {
 	onload: function (frm) {
 		if (frm.is_new() && frm.doc.slot_master && frm.doc.employee_function) {
@@ -18,17 +7,12 @@ frappe.ui.form.on("Slot Opening", {
 		set_project_filter(frm);
 	},
 
-	// ── Fires on every form load / save / refresh ──
 	refresh: function (frm) {
 		frm.clear_custom_buttons();
 
-		// Always show total_batch_remained field
 		frm.set_df_property("total_batch_remained", "hidden", 0);
 		frm.refresh_field("total_batch_remained");
 
-		// ── Custom Button: Capacity Remained ──
-		// Shows a popup table of all dates with total / booked / available slots
-		// from the Slot Capacity Tracker linked to the selected Slot Master
 		frm.add_custom_button("📊 Capacity Remained", function () {
 			if (!frm.doc.slot_master) {
 				frappe.msgprint("Please select a Slot Master first!");
@@ -92,9 +76,6 @@ frappe.ui.form.on("Slot Opening", {
 			});
 		});
 
-		// ── Custom Button: Create Batch ──
-		// Only shown for approved/submitted documents
-		// Pre-fills the new Batch Creation doc with data from this Slot Opening
 		if (frm.doc.docstatus === 1 && frm.doc.slot_master) {
 			frappe.call({
 				method: 'custom_batch_planning.custom_batch_planning.doctype.slot_opening.slot_opening.get_sct_details',
@@ -140,9 +121,6 @@ frappe.ui.form.on("Slot Opening", {
 			});
 		}
 
-		// ── If a Slot Master is already selected (e.g. on reload) ──
-		// Re-cache batch dates and refresh remaining capacity
-		// REPLACE this block in refresh:
 		if (frm.doc.slot_master) {
 			frappe.db.get_value(
 				"Slot Master List",
@@ -155,23 +133,22 @@ frappe.ui.form.on("Slot Opening", {
 						frm.doc.__batch_capacity = data.batch_capacity;
 					}
 					fetch_sct_remaining(frm);
-					loadSlotOpeningCalendar(frm); // ← MOVED HERE
+					loadSlotOpeningCalendar(frm);
 				},
 			);
 		} else {
-			loadSlotOpeningCalendar(frm); // ← handles new/empty doc
+			loadSlotOpeningCalendar(frm);
 		}
 		set_slot_master_filter(frm);
 	},
 
-	// ── After Save: redirect to the auto-named doc if name changed ──
 	after_save: function (frm) {
 		if (frm.doc.name.startsWith("SO-")) {
 			if (frm.doc.__islocal || frm._was_new) {
 				frappe.set_route("Form", "Slot Opening", frm.doc.name);
 			}
 		}
-		// Name may not be updated in the form object yet — fetch from DB by creation timestamp
+
 		frappe.db
 			.get_list("Slot Opening", {
 				filters: { creation: frm.doc.creation },
@@ -185,8 +162,6 @@ frappe.ui.form.on("Slot Opening", {
 			});
 	},
 
-	// ── Employee Function changed ──
-	// Clear all dependent fields and re-render calendar with new context
 	employee_function: function (frm) {
 		frm.set_value("slot_master", "");
 		frm.set_value("project", "");
@@ -202,18 +177,12 @@ frappe.ui.form.on("Slot Opening", {
 		loadSlotOpeningCalendar(frm);
 	},
 
-	// ── Project changed ──
-	// Re-render calendar with new project context
 	project: function (frm) {
 		loadSlotOpeningCalendar(frm);
 	},
 
-	// ── Slot Master changed ──
-	// Fetches batch dates + project from Slot Master List
-	// Then auto-fills slot_booking child table from SCT
-	// Finally loads the calendar (AFTER project is confirmed set)
 	slot_master: function (frm) {
-		// Enforce employee_function first
+
 		if (frm.doc.slot_master && !frm.doc.employee_function) {
 			frappe.msgprint({
 				title: __("Missing Employee Function"),
@@ -226,7 +195,6 @@ frappe.ui.form.on("Slot Opening", {
 			return;
 		}
 
-		// Cleared — reset all dependent fields
 		if (!frm.doc.slot_master) {
 			frm.set_value("total_batch_capacity", "");
 			frm.set_value("total_batch_remained", "");
@@ -246,12 +214,10 @@ frappe.ui.form.on("Slot Opening", {
 			function (data) {
 				if (!data) return;
 
-				// Cache batch meta on the form object for child-table validators
 				frm.doc.__batch_end_date = data.batch_end_date;
 				frm.doc.__batch_start_date = data.batch_start_date;
 				frm.doc.__batch_capacity = data.batch_capacity;
 
-				// Reject expired Slot Masters
 				let today = frappe.datetime.nowdate();
 				if (data.batch_end_date && data.batch_end_date < today) {
 					frappe.msgprint({
@@ -263,14 +229,12 @@ frappe.ui.form.on("Slot Opening", {
 					return;
 				}
 
-				// Populate batch date fields
 				frm.set_value("batch_start_date", data.batch_start_date);
 				frm.set_value("batch_end_date", data.batch_end_date);
 				frm.set_value("project", data.project);
 
 				loadSlotOpeningCalendar(frm);
 
-				// Calculate total capacity from date range × daily capacity
 				let total_capacity = calculate_total_capacity(
 					data.batch_start_date,
 					data.batch_end_date,
@@ -280,9 +244,6 @@ frappe.ui.form.on("Slot Opening", {
 				calculate_totals(frm);
 				fetch_sct_remaining(frm);
 
-				// ── Auto-fill slot_booking child table from SCT ──
-				// Fetches all dates from the SCT for this Slot Master
-				// and adds one row per date with available capacity pre-filled
 				frappe.call({
 					method: "custom_batch_planning.custom_batch_planning.doctype.slot_opening.slot_opening.get_sct_details",
 					args: { slot_master: frm.doc.slot_master },
@@ -303,7 +264,6 @@ frappe.ui.form.on("Slot Opening", {
 							return;
 						}
 
-						// Clear existing rows and re-populate
 						frm.doc.slot_booking = [];
 						frm.refresh_field("slot_booking");
 
@@ -314,24 +274,21 @@ frappe.ui.form.on("Slot Opening", {
 							row.batch_capacity = data.batch_capacity;
 							row.total_slots = parseInt(data.batch_capacity) || 0;
 							row.availabe_capacity = parseInt(d.capacity_available) || 0;
-							row.__sct_available = d.capacity_available; // runtime cache for validation
+							row.__sct_available = d.capacity_available;
 							if (parseInt(d.capacity_available) === 0) {
-								row.reason = ""; // clear reason for full dates
+								row.reason = "";
 							}
 						});
 
 						frm.refresh_field("slot_booking");
 						calculate_totals(frm);
-						// Note: calendar is NOT re-called here — already called above
-						// after project_name resolved to avoid double render
+
 					},
 				});
 			},
 		);
 	},
 
-	// ── Form validate (client-side) ──
-	// Prevents saving if planned batches exceed total capacity
 	validate: function (frm) {
 		let total_planned = parseInt(frm.doc.total_batches_planned) || 0;
 		let capacity = parseInt(frm.doc.total_batch_capacity) || 0;
@@ -341,13 +298,12 @@ frappe.ui.form.on("Slot Opening", {
 			);
 		}
 
-		// Positive integer validation for child table Planning Capacity (booked_slots)
 		(frm.doc.slot_booking || []).forEach(function (row) {
 			let val = row.booked_slots;
 			if (val === undefined || val === null || val === "" || !Number.isInteger(Number(val)) || parseInt(val, 10) <= 0) {
 				frappe.throw(`⚠️ Row #${row.idx}: Planning Capacity must be a positive integer greater than zero.`);
 			}
-			// Normalize leading zeros
+
 			let intVal = parseInt(val, 10);
 			if (intVal != val) {
 				frappe.model.set_value(row.doctype, row.name, "booked_slots", intVal);
@@ -356,25 +312,18 @@ frappe.ui.form.on("Slot Opening", {
 	},
 });
 
-// ─────────────────────────────────────────────────────────────────────────────
-// SECTION 2 — Child Table Events: Slot Booking CT
-// ─────────────────────────────────────────────────────────────────────────────
-
 frappe.ui.form.on("Slot Booking CT", {
-	// ── Slot Booking Date selected ──
-	// Validates: not in past, within batch range, no duplicates, SCT has capacity
+
 	slot_booking_date: function (frm, cdt, cdn) {
 		let row = locals[cdt][cdn];
 		if (!row.slot_booking_date) return;
 
-		// Cannot be before today
 		if (row.slot_booking_date < frappe.datetime.nowdate()) {
 			frappe.model.set_value(cdt, cdn, "slot_booking_date", "");
 			frappe.msgprint("⚠️ Slot Booking Date cannot be before today!");
 			return;
 		}
 
-		// Must be within Slot Master batch window
 		let start = frm.doc.__batch_start_date || frm.doc.batch_start_date;
 		let end = frm.doc.__batch_end_date || frm.doc.batch_end_date;
 
@@ -389,7 +338,6 @@ frappe.ui.form.on("Slot Booking CT", {
 			return;
 		}
 
-		// No duplicate dates in child table
 		let duplicate = (frm.doc.slot_booking || []).filter(
 			(r) => r.name !== row.name && r.slot_booking_date === row.slot_booking_date,
 		);
@@ -401,7 +349,6 @@ frappe.ui.form.on("Slot Booking CT", {
 
 		if (!frm.doc.slot_master) return;
 
-		// Check live SCT capacity for this specific date
 		frappe.call({
 			method: "custom_batch_planning.custom_batch_planning.doctype.slot_opening.slot_opening.get_sct_details",
 			args: { slot_master: frm.doc.slot_master, date: row.slot_booking_date },
@@ -430,7 +377,6 @@ frappe.ui.form.on("Slot Booking CT", {
 					return;
 				}
 
-				// Cache SCT available count on the row for later validation
 				row.__sct_available = available;
 				row.total_slots = parseInt(frm.doc.__batch_capacity) || parseInt(detail.total_capacity) || 0;
 				row.availabe_capacity = available;
@@ -463,21 +409,12 @@ frappe.ui.form.on("Slot Booking CT", {
 		calculate_totals(frm);
 	},
 
-	// Recalculate grand totals when a row is removed
 	slot_booking_remove: function (frm) {
 		calculate_totals(frm);
 		fetch_sct_remaining(frm);
 	},
 });
 
-// ─────────────────────────────────────────────────────────────────────────────
-// SECTION 3 — Helper Functions
-// ─────────────────────────────────────────────────────────────────────────────
-
-/**
- * Calculate total batch capacity from date range and daily capacity.
- * total = number_of_days × batch_capacity_per_day
- */
 function calculate_total_capacity(start_date, end_date, batch_capacity) {
 	if (!start_date || !end_date || !batch_capacity) return 0;
 	let start = frappe.datetime.str_to_obj(start_date);
@@ -486,14 +423,6 @@ function calculate_total_capacity(start_date, end_date, batch_capacity) {
 	return num_days * parseInt(batch_capacity);
 }
 
-/**
- * Set the Slot Master link field filter.
- * Only shows Slot Masters that are:
- *   - Submitted (docstatus = 1)
- *   - Workflow state = Approved
- *   - Not yet expired (batch_end_date >= today)
- *   - Matching selected employee_function (if set)
- */
 function set_slot_master_filter(frm) {
 	console.log("set_slot_master_filter called, ef:", frm.doc.employee_function);
 	frm.set_query("slot_master", function () {
@@ -507,10 +436,6 @@ function set_slot_master_filter(frm) {
 	});
 }
 
-/**
- * Recalculate form-level totals from all child rows.
- * Updates: total_batches_planned, total_batch_remained
- */
 function calculate_totals(frm) {
 	let total_batches = 0;
 	(frm.doc.slot_booking || []).forEach(function (row) {
@@ -520,11 +445,6 @@ function calculate_totals(frm) {
 	fetch_sct_remaining(frm);
 }
 
-/**
- * Fetch remaining capacity from SCT and update total_batch_remained field.
- * For new docs: subtracts the currently planned batches (unsaved) from DB available.
- * For saved docs: shows DB available as-is (already deducted on save).
- */
 function fetch_sct_remaining(frm) {
 	if (!frm.doc.slot_master) return;
 	frappe.call({
@@ -540,7 +460,7 @@ function fetch_sct_remaining(frm) {
 
 			let remained = db_total_available;
 			if (frm.is_new()) {
-				// For new unsaved docs, subtract what the user has planned so far
+
 				let current_planned = parseInt(frm.doc.total_batches_planned) || 0;
 				remained = db_total_available - current_planned;
 			}
@@ -550,28 +470,11 @@ function fetch_sct_remaining(frm) {
 	});
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// SECTION 4 — Calendar
-// ─────────────────────────────────────────────────────────────────────────────
-
-/**
- * Entry point for the Slot Availability Calendar.
- * Called on: refresh, employee_function change, slot_master change
- *
- * Flow:
- *   1. Guard checks: needs employee_function
- *   2. Injects styles (once per page load)
- *   3. Shows loading spinner
- *   4. Fetches SCT parent records filtered by employee_function
- *   5. Fetches all Slot Capacity Detail child rows in one bulk call
- *   6. Aggregates by date → passes to _renderCalendar()
- */
 function loadSlotOpeningCalendar(frm) {
 	if (!frm.fields_dict.calenders) return;
 
 	const wrapper = frm.fields_dict.calenders.$wrapper;
 
-	// Guard: Employee Function not selected yet
 	if (!frm.doc.employee_function) {
 		wrapper.html(`
             <div class="so-cal-empty">
@@ -586,10 +489,8 @@ function loadSlotOpeningCalendar(frm) {
 		return;
 	}
 
-	// Inject styles (idempotent — only adds once)
 	_injectCalendarBaseStyles();
 
-	// Show loading spinner while data fetches
 	wrapper.html(`
         <div class="so-cal-shell">
             <div class="so-cal-loading">
@@ -622,7 +523,6 @@ function loadSlotOpeningCalendar(frm) {
 				return;
 			}
 
-			// Aggregate by date — same logic as before
 			const byDate = {};
 			rows.forEach(function (row) {
 				const d = String(row.date).split(" ")[0];
@@ -648,19 +548,10 @@ function loadSlotOpeningCalendar(frm) {
 	});
 }
 
-/**
- * Builds the calendar shell HTML and loads FullCalendar JS/CSS.
- * Mounts the calendar only after all assets are ready.
- *
- * @param {Object} frm      - Frappe form object
- * @param {Object} wrapper  - jQuery wrapper for the HTML field
- * @param {Object} byDate   - Aggregated slot data keyed by YYYY-MM-DD
- */
 function _renderCalendar(frm, wrapper, byDate) {
 	const FC_CSS = "https://cdn.jsdelivr.net/npm/fullcalendar@6.1.9/index.global.min.css";
 	const FC_JS = "https://cdn.jsdelivr.net/npm/fullcalendar@6.1.9/index.global.min.js";
 
-	// Render the shell — calendar mounts into #so-fc-mount
 	wrapper.html(`
         <div class="so-cal-shell">
 
@@ -698,7 +589,6 @@ function _renderCalendar(frm, wrapper, byDate) {
 
 	const _init = () => _mountFC(frm, byDate);
 
-	// Load CSS (unchanged)
 	if (!document.querySelector(`link[href="${FC_CSS}"]`)) {
 		const link = document.createElement("link");
 		link.rel = "stylesheet";
@@ -706,7 +596,6 @@ function _renderCalendar(frm, wrapper, byDate) {
 		document.head.appendChild(link);
 	}
 
-	// NEW: poll until #so-fc-mount exists in DOM
 	function _waitAndInit(retriesLeft) {
 		if (typeof FullCalendar !== "undefined" && document.getElementById("so-fc-mount")) {
 			setTimeout(_init, 50);
@@ -721,21 +610,14 @@ function _renderCalendar(frm, wrapper, byDate) {
 		script.onload = () => _waitAndInit(10);
 		document.head.appendChild(script);
 	} else {
-		_waitAndInit(10); // already loaded, just wait for DOM
+		_waitAndInit(10);
 	}
 }
 
-/**
- * Instantiates and renders the FullCalendar instance.
- * Handles: cell colour-coding, pill badges, date-click popup.
- *
- * @param {Object} byDate - Aggregated slot data keyed by YYYY-MM-DD
- */
 function _mountFC(frm, byDate) {
 	const el = document.getElementById("so-fc-mount");
 	if (!el) return;
 
-	// Destroy previous instance to prevent double-mount on refresh/save
 	if (window.__soCalInstance) {
 		try {
 			window.__soCalInstance.destroy();
@@ -759,27 +641,24 @@ function _mountFC(frm, byDate) {
 		showNonCurrentDates: true,
 		dayMaxEvents: false,
 
-		// ── Colour-code each day cell after it mounts in the DOM ──
 		dayCellDidMount: function (info) {
 			const dateStr = _toDateStr(info.date);
 			const data = byDate[dateStr];
 			const frame = info.el.querySelector(".fc-daygrid-day-frame");
 
-			// No data for this date — leave cell plain
 			if (!frame || !data) return;
 
-			// Build the pill badge
 			const pill = document.createElement("div");
-			pill.style.pointerEvents = "none"; // Ensure clicks pass through
+			pill.style.pointerEvents = "none";
 			pill.className = "so-cal-pill";
 
 			if (data.available === 0) {
-				// Fully booked
+
 				pill.classList.add("so-cal-pill--full");
 				pill.innerHTML = '<span class="so-pill-label">FULL</span>';
 				info.el.classList.add("so-day--full");
 			} else if (data.booked > 0) {
-				// Partially booked
+
 				pill.classList.add("so-cal-pill--partial");
 				pill.innerHTML = `
                     <span class="so-pill-num">${data.available}</span>
@@ -789,7 +668,7 @@ function _mountFC(frm, byDate) {
                 `;
 				info.el.classList.add("so-day--partial");
 			} else {
-				// Fully available
+
 				pill.classList.add("so-cal-pill--avail");
 				pill.innerHTML = `
                     <span class="so-pill-num">${data.available}</span>
@@ -804,12 +683,10 @@ function _mountFC(frm, byDate) {
 			info.el.style.cursor = "pointer";
 		},
 
-		// ── Date click: show detailed breakdown popup ──
 		dateClick: function (info) {
 			const dateStr = _toDateStr(info.date);
 			const data = byDate[dateStr];
 
-			// Date has no slot data
 			if (!data) {
 				frappe.msgprint({
 					title: `📅 ${_humanDate(dateStr)}`,
@@ -820,13 +697,11 @@ function _mountFC(frm, byDate) {
 				return;
 			}
 
-			// Determine status badge colour + label
 			const statusColor =
 				data.available === 0 ? "#ef4444" : data.booked > 0 ? "#f59e0b" : "#22c55e";
 			const statusLabel =
 				data.available === 0 ? "FULL" : data.booked > 0 ? "PARTIAL" : "AVAILABLE";
 
-			// Build per-SCT source rows for the breakdown table
 			const rows = data.sources
 				.map(
 					(s) => `
@@ -896,9 +771,8 @@ function _mountFC(frm, byDate) {
 	});
 
 	calendar.render();
-	window.__soCalInstance = calendar; // ← store reference for next destroy
+	window.__soCalInstance = calendar;
 
-	// Use IntersectionObserver to updateSize when calendar tab becomes visible
 	if (window.__soCalObserver) window.__soCalObserver.disconnect();
 	window.__soCalObserver = new IntersectionObserver((entries) => {
 		if (entries[0].isIntersecting) {
@@ -913,14 +787,6 @@ function _mountFC(frm, byDate) {
 	setTimeout(() => calendar.updateSize(), 800);
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// SECTION 5 — Calendar Utility Helpers
-// ─────────────────────────────────────────────────────────────────────────────
-
-/**
- * Convert a JS Date object to YYYY-MM-DD string (local time, not UTC).
- * FullCalendar's dayCellDidMount gives local Date objects.
- */
 function _toDateStr(date) {
 	const y = date.getFullYear();
 	const m = String(date.getMonth() + 1).padStart(2, "0");
@@ -928,9 +794,6 @@ function _toDateStr(date) {
 	return `${y}-${m}-${d}`;
 }
 
-/**
- * Format YYYY-MM-DD to human-readable "DD Mon YYYY" for popup titles.
- */
 function _humanDate(dateStr) {
 	const [y, m, d] = dateStr.split("-");
 	const mon = [
@@ -949,27 +812,6 @@ function _humanDate(dateStr) {
 	];
 	return `${d} ${mon[parseInt(m) - 1]} ${y}`;
 }
-
-/**
- * _injectCalendarBaseStyles()
- *
- * ⚠️  PASTE YOUR EXISTING _injectCalendarBaseStyles() FUNCTION HERE.
- *
- * It covers:
- *   - .so-cal-shell, .so-cal-header, .so-cal-body, .so-cal-footer
- *   - .so-cal-loading, .so-cal-spinner, @keyframes so-spin
- *   - .so-cal-empty states
- *   - FullCalendar overrides (#so-fc-mount)
- *   - Day state tints: .so-day--avail, .so-day--partial, .so-day--full
- *   - Pill badges: .so-cal-pill, .so-cal-pill--avail/partial/full
- *   - FC button overrides
- *   - Responsive breakpoints: 768px, 560px, 380px
- */
-// ↓ PASTE _injectCalendarBaseStyles() HERE ↓
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Styles (injected once into <head>)
-// ─────────────────────────────────────────────────────────────────────────────
 
 function _injectCalendarBaseStyles() {
 	if (document.getElementById("so-cal-styles")) return;
@@ -1289,6 +1131,4 @@ function set_project_filter(frm) {
 		}
 	});
 }
-
-
 

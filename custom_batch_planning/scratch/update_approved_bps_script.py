@@ -2,7 +2,6 @@ import frappe
 
 def update_server_script():
     script_name = 'Batch Planning — Approved BPs for Material Planning'
-    # Wait! I should find it by api_method
     scripts = frappe.get_all('Server Script', filters={'api_method': 'get_approved_batch_plannings'}, fields=['name'])
     if not scripts:
         print("Script not found by api_method 'get_approved_batch_plannings'")

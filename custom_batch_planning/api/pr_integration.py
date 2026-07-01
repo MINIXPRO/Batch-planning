@@ -1,17 +1,14 @@
 import frappe
 from frappe.utils import flt
 
-
 def consolidate_items_table(doc):
     if not doc.get("items"):
         return
 
-    # 1. Clear custom_batch_reference on all item rows
     for item in doc.items:
         if hasattr(item, "custom_batch_reference"):
             setattr(item, "custom_batch_reference", None)
 
-    # 2. Group items by item_code
     grouped_items = {}
     for item in doc.items:
         key = item.item_code
@@ -33,21 +30,17 @@ def consolidate_items_table(doc):
             if hasattr(target, "custom_batch_reference"):
                 setattr(target, "custom_batch_reference", None)
 
-            # Sum quantities
             total_qty = sum(flt(r.qty) for r in rows)
             target.qty = total_qty
 
-            # Update stock_qty
             if hasattr(target, "stock_qty"):
                 cf = flt(target.get("conversion_factor") or 1)
                 target.stock_qty = total_qty * cf
 
-            # Update transfer_qty (for Stock Entry Detail)
             if hasattr(target, "transfer_qty"):
                 cf = flt(target.get("conversion_factor") or 1)
                 target.transfer_qty = total_qty * cf
 
-            # Update amount
             if hasattr(target, "rate") and hasattr(target, "amount"):
                 target.amount = flt(target.qty * flt(target.rate or 0))
 
@@ -55,15 +48,12 @@ def consolidate_items_table(doc):
 
     doc.items = new_items
 
-    # Recalculate taxes and totals if the method is available (for sales/purchase docs)
     if hasattr(doc, "calculate_taxes_and_totals") and getattr(doc, "currency", None):
         doc.calculate_taxes_and_totals()
-
 
 def validate_material_request(doc, method=None):
     """Consolidate child items and remove custom_batch_reference."""
     consolidate_items_table(doc)
-
 
 def map_purchase_receipt_fields(doc, method=None):
     """
@@ -75,9 +65,8 @@ def map_purchase_receipt_fields(doc, method=None):
     consolidate_items_table(doc)
 
     if doc.get("custom_batch_planning_no"):
-        return  # Already set — nothing to do
+        return
 
-    # Collect unique PO and MR names from item rows
     po_names = []
     mr_names = []
     for item in doc.items or []:
@@ -86,20 +75,17 @@ def map_purchase_receipt_fields(doc, method=None):
         if item.get("material_request") and item.material_request not in mr_names:
             mr_names.append(item.material_request)
 
-    # 1. Try PO parent
     for po in po_names:
         val = frappe.db.get_value("Purchase Order", po, "custom_batch_planning_no")
         if val and frappe.db.exists("Batch Planning", val):
             doc.custom_batch_planning_no = val
             return
 
-    # 2. Fallback: MR parent
     for mr in mr_names:
         val = frappe.db.get_value("Material Request", mr, "custom_batch_planning_no")
         if val and frappe.db.exists("Batch Planning", val):
             doc.custom_batch_planning_no = val
             return
-
 
 def map_stock_entry_fields(doc, method=None):
     """
@@ -111,9 +97,8 @@ def map_stock_entry_fields(doc, method=None):
     consolidate_items_table(doc)
 
     if doc.get("custom_batch_planning_no"):
-        return  # Already set
+        return
 
-    # Find Purchase Receipt reference
     pr_name = doc.get("purchase_receipt_no")
     if not pr_name:
         for item in doc.items or []:
@@ -126,7 +111,6 @@ def map_stock_entry_fields(doc, method=None):
         if val and frappe.db.exists("Batch Planning", val):
             doc.custom_batch_planning_no = val
 
-
 def map_purchase_invoice_fields(doc, method=None):
     """
     Populate parent Purchase Invoice `custom_batch_planning_no`
@@ -137,7 +121,7 @@ def map_purchase_invoice_fields(doc, method=None):
     consolidate_items_table(doc)
 
     if doc.get("custom_batch_planning_no"):
-        return  # Already set
+        return
 
     pr_names = []
     po_names = []
@@ -151,21 +135,18 @@ def map_purchase_invoice_fields(doc, method=None):
         if item.get("material_request") and item.material_request not in mr_names:
             mr_names.append(item.material_request)
 
-    # 1. Purchase Receipt
     for pr in pr_names:
         val = frappe.db.get_value("Purchase Receipt", pr, "custom_batch_planning_no")
         if val and frappe.db.exists("Batch Planning", val):
             doc.custom_batch_planning_no = val
             return
 
-    # 2. Purchase Order
     for po in po_names:
         val = frappe.db.get_value("Purchase Order", po, "custom_batch_planning_no")
         if val and frappe.db.exists("Batch Planning", val):
             doc.custom_batch_planning_no = val
             return
 
-    # 3. Material Request
     for mr in mr_names:
         val = frappe.db.get_value("Material Request", mr, "custom_batch_planning_no")
         if val and frappe.db.exists("Batch Planning", val):

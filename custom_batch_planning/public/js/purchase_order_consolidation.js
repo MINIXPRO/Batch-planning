@@ -5,7 +5,6 @@ frappe.ui.form.on("Purchase Order", {
         let items = frm.doc.items || [];
         if (items.length <= 1) return;
 
-        // Group items by item_code and consolidate duplicates
         let grouped = {};
         items.forEach(item => {
             let key = item.item_code;
@@ -52,8 +51,6 @@ frappe.ui.form.on("Purchase Order", {
             frm.refresh_field("items");
         }
 
-        // Set parent custom_batch_planning_no from the first MR that has one
-        // (server-side validate_purchase_order will also handle this on save)
         if (!frm.doc.custom_batch_planning_no) {
             for (let item of frm.doc.items || []) {
                 if (item.material_request) {

@@ -4,7 +4,6 @@ def update_multi_batch_script():
     script_name = 'Batch Planning — Multi Batch Material Requirement Plan'
     scripts = frappe.get_all('Server Script', filters={'name': script_name}, fields=['name'])
     if not scripts:
-        # try by api_method
         scripts = frappe.get_all('Server Script', filters={'api_method': 'get_multi_batch_material_plan'}, fields=['name'])
         
     if not scripts:

@@ -1,7 +1,6 @@
 import frappe
 
 def run():
-    # Find any Client Script for Slot Opening and disable them
     scripts = frappe.get_all("Client Script", filters={"dt": "Slot Opening"})
     for s in scripts:
         doc = frappe.get_doc("Client Script", s.name)

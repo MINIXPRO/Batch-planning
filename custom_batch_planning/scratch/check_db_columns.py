@@ -9,6 +9,3 @@ def run():
     meta_detail = frappe.get_meta("Stock Entry Detail")
     print(sorted([f.fieldname for f in meta_detail.fields]))
 
-
-
-
