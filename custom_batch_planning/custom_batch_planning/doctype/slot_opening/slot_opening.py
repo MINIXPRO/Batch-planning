@@ -285,11 +285,6 @@ class SlotOpening(Document):
 
         sct_doc.save()
 
-        frappe.msgprint(
-            f"Slot Capacity Tracker <b>{sct_name}</b> updated successfully.",
-            title="✅ SCT Updated",
-            indicator="green"
-        )
 
     def on_submit(self):
         if getattr(self, "workflow_state", None) == "Approved":
@@ -377,11 +372,6 @@ class SlotOpening(Document):
 
         sct_doc.save()
 
-        frappe.msgprint(
-            f"Slot Capacity Tracker <b>{sct_name}</b> reversed successfully.",
-            title="✅ SCT Reversed",
-            indicator="blue"
-        )
 
 @frappe.whitelist()
 def get_active_slot_masters(doctype, txt, searchfield, start=0, page_len=20, filters=None):
