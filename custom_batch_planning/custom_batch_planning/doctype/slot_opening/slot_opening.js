@@ -447,6 +447,7 @@ function calculate_totals(frm) {
 
 function fetch_sct_remaining(frm) {
 	if (!frm.doc.slot_master) return;
+	if (frm.doc.docstatus === 1) return; // submitted docs are locked — skip recalculation entirely
 	frappe.call({
 		method: "custom_batch_planning.custom_batch_planning.doctype.slot_opening.slot_opening.get_sct_details",
 		args: { slot_master: frm.doc.slot_master },
@@ -460,7 +461,6 @@ function fetch_sct_remaining(frm) {
 
 			let remained = db_total_available;
 			if (frm.is_new()) {
-
 				let current_planned = parseInt(frm.doc.total_batches_planned) || 0;
 				remained = db_total_available - current_planned;
 			}
