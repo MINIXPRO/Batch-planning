@@ -194,7 +194,7 @@ class SlotOpening(Document):
             """, (self.slot_master, date))[0][0]
 
             current_booked = next(
-                (int(r.booked_slots or 0) for r in self.slot_booking
+                (int(r.planning_capacity or 0) for r in self.slot_booking
                  if str(r.slot_booking_date) == str(date)), 0
             )
 
@@ -202,7 +202,7 @@ class SlotOpening(Document):
                 old_booked = frappe.db.get_value(
                     "Slot Booking CT",
                     {"parent": self.name, "slot_booking_date": date},
-                    "booked_slots"
+                    "planning_capacity"
                 ) or 0
                 net_booking = current_booked - int(old_booked)
             else:
@@ -239,10 +239,10 @@ class SlotOpening(Document):
             if not row.slot_booking_date:
                 continue
 
-            if not row.booked_slots:
+            if not row.planning_capacity:
                 continue
 
-            booked = int(row.booked_slots)
+            booked = int(row.planning_capacity)
 
             sct_detail = next(
                 (
@@ -338,10 +338,10 @@ class SlotOpening(Document):
             if not row.slot_booking_date:
                 continue
 
-            if not row.booked_slots:
+            if not row.planning_capacity:
                 continue
 
-            booked = int(row.booked_slots)
+            booked = int(row.planning_capacity)
 
             sct_detail = next(
                 (

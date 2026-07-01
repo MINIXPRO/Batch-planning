@@ -47,7 +47,7 @@ class SlotMasterList(Document):
             frappe.throw("Daily Batch Capacity must be a valid whole number.")
 
         if capacity < 1:
-            frappe.throw("Daily Batch Capacity must be at least 1.")
+            frappe.throw("Daily Batch Capacity must be greater than 1.")
 
         self.batch_capacity = capacity
 

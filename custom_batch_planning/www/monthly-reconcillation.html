@@ -755,7 +755,7 @@
 
         function renderTable(data) {
             const totals = {
-                total_slots: 0, booked_slots: 0, vacant_slots: 0,
+                total_slots: 0, planning_capacity: 0, vacant_slots: 0,
                 batches_planned: 0, batches_cancelled: 0,
                 mr_count: 0, po_count: 0, grn_count: 0, grn_qty: 0,
                 pi_count: 0, ma_count: 0, po_pending: 0,
@@ -770,7 +770,7 @@
                 <tr>
                     <td class="month-cell">📅 ${row.month}</td>
                     <td>${bdg(row.total_slots, 'green')}</td>
-                    <td>${bdg(row.booked_slots, 'dark')}</td>
+                    <td>${bdg(row.planning_capacity, 'dark')}</td>
                     <td>${bdg(row.vacant_slots, row.vacant_slots > 0 ? 'orange' : 'zero')}</td>
                     <td>${bdg(row.batches_planned, 'green')}</td>
                     <td>${bdg(row.batches_cancelled, row.batches_cancelled > 0 ? 'red' : 'zero')}</td>
@@ -814,7 +814,7 @@
                     <tr class="total-row">
                         <td style="text-align:left;font-weight:800">📊 TOTAL</td>
                         <td>${totals.total_slots}</td>
-                        <td>${totals.booked_slots}</td>
+                        <td>${totals.planning_capacity}</td>
                         <td>${totals.vacant_slots}</td>
                         <td>${totals.batches_planned}</td>
                         <td>${totals.batches_cancelled}</td>
@@ -857,7 +857,7 @@
                 'Issues', 'Issued Qty', 'Issued Value'];
             let csv = headers.join(',') + '\n';
             allData.forEach(r => {
-                csv += [r.month, r.total_slots, r.booked_slots, r.vacant_slots,
+                csv += [r.month, r.total_slots, r.planning_capacity, r.vacant_slots,
                 r.batches_planned, r.batches_cancelled, r.mr_count,
                 r.po_count, r.grn_count, r.grn_qty, r.pi_count,
                 r.ma_count, r.po_pending,

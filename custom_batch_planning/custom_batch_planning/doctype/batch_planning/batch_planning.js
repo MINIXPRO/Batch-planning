@@ -362,7 +362,7 @@ frappe.ui.form.on('Batch Planning', {
                         nr.slot_booking_date = row.slot_booking_date;
                         nr.how_many_slots_per_day = row.how_many_slots_per_day;
                         nr.total_slots = row.total_slots;
-                        nr.booked_slots = row.booked_slots;
+                        nr.planning_capacity = row.planning_capacity;
                         nr.availabe_capacity = row.availabe_capacity;
                         nr.reason = row.reason;
                     });
@@ -384,7 +384,7 @@ frappe.ui.form.on('Batch Planning', {
                             });
 
                             future_rows.forEach(function (slot) {
-                                let booked = parseInt(slot.booked_slots) || 0;
+                                let booked = parseInt(slot.planning_capacity) || 0;
                                 let planned = sct_map[slot.slot_booking_date] || 0;
                                 let remaining = booked - planned;
 

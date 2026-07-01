@@ -64,7 +64,7 @@ def get_monthly_reconciliation(year=None, month=None, employee_function=None):
         r["batches_planned"]  = r.get("bp_count") or 0
         r["batches_cancelled"] = 0
         r["total_slots"]      = 0
-        r["booked_slots"]     = 0
+        r["planning_capacity"]     = 0
         r["vacant_slots"]     = 0
 
     result.sort(key=lambda x: (

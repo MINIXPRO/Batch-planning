@@ -9,7 +9,7 @@
   "field_order": [
     "slot_booking_date",
     "total_slots",
-    "booked_slots",
+    "planning_capacity",
     "availabe_capacity",
     "reason"
   ],
@@ -30,7 +30,7 @@
       "read_only": 1
     },
     {
-      "fieldname": "booked_slots",
+      "fieldname": "planning_capacity",
       "fieldtype": "Int",
       "in_list_view": 1,
       "label": "Planning Capacity",

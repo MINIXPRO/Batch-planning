@@ -128,7 +128,7 @@ batch creation. On submit (approval), `create_batches_planned_records()` generat
 - **One Batch Planning per Slot Opening** — enforced server-side to keep batch ownership
   unambiguous; all batches for a given Slot Opening live inside a single Batch Planning document.
 - **Per-date capacity check** — the number of `custom_batch_details` rows assigned to a given date
-  cannot exceed the `booked_slots` value for that same date in the Slot Opening's `Slot Booking CT`
+  cannot exceed the `planning_capacity` value for that same date in the Slot Opening's `Slot Booking CT`
   child table. This mirrors the client-side `has_remaining` logic exactly, so UI and server stay in
   sync.
 - **Material Allocation field locking** — only `allocate_qty`/`qty_requested` and `reason` are

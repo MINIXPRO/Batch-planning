@@ -87,7 +87,7 @@ frappe.ui.form.on("Slot Opening", {
 					});
 
 					let has_remaining = (frm.doc.slot_booking || []).some(function (row) {
-						let booked = parseInt(row.booked_slots) || 0;
+						let booked = parseInt(row.planning_capacity) || 0;
 						let planned = sct_map[row.slot_booking_date] || 0;
 						return booked > planned;
 					});
@@ -299,14 +299,14 @@ frappe.ui.form.on("Slot Opening", {
 		}
 
 		(frm.doc.slot_booking || []).forEach(function (row) {
-			let val = row.booked_slots;
+			let val = row.planning_capacity;
 			if (val === undefined || val === null || val === "" || !Number.isInteger(Number(val)) || parseInt(val, 10) <= 0) {
 				frappe.throw(`⚠️ Row #${row.idx}: Planning Capacity must be a positive integer greater than zero.`);
 			}
 
 			let intVal = parseInt(val, 10);
 			if (intVal != val) {
-				frappe.model.set_value(row.doctype, row.name, "booked_slots", intVal);
+				frappe.model.set_value(row.doctype, row.name, "planning_capacity", intVal);
 			}
 		});
 	},
@@ -392,16 +392,16 @@ frappe.ui.form.on("Slot Booking CT", {
 		});
 	},
 
-	booked_slots: function (frm, cdt, cdn) {
+	planning_capacity: function (frm, cdt, cdn) {
 		let row = locals[cdt][cdn];
 		let available = parseInt(row.availabe_capacity) || 0;
-		let booked = parseInt(row.booked_slots) || 0;
+		let booked = parseInt(row.planning_capacity) || 0;
 		if (booked > available) {
 			frappe.msgprint(__("⚠️ Planning Capacity cannot exceed Available Capacity ({0})!", [available]));
-			frappe.model.set_value(cdt, cdn, "booked_slots", 0);
+			frappe.model.set_value(cdt, cdn, "planning_capacity", 0);
 			return;
 		}
-		if (row.total_slots && row.booked_slots && parseInt(row.total_slots) === parseInt(row.booked_slots)) {
+		if (row.total_slots && row.planning_capacity && parseInt(row.total_slots) === parseInt(row.planning_capacity)) {
 			frappe.model.set_value(cdt, cdn, "reason", "N/A");
 		} else if (row.reason === "N/A") {
 			frappe.model.set_value(cdt, cdn, "reason", "");
@@ -439,7 +439,7 @@ function set_slot_master_filter(frm) {
 function calculate_totals(frm) {
 	let total_batches = 0;
 	(frm.doc.slot_booking || []).forEach(function (row) {
-		total_batches += parseInt(row.booked_slots) || 0;
+		total_batches += parseInt(row.planning_capacity) || 0;
 	});
 	frm.set_value("total_batches_planned", total_batches);
 	fetch_sct_remaining(frm);

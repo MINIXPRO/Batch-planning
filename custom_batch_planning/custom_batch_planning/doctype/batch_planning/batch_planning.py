@@ -90,7 +90,7 @@ def get_valid_slot_openings(employee_function, current_doc=None):
                     FROM `tabBatches Planned` bp
                     WHERE bp.slot_opening_id = so.name
                       AND bp.slot_booking_date = sb2.slot_booking_date
-                ) < sb2.booked_slots
+                ) < sb2.planning_capacity
           )
     """,
         (employee_function, today, today),
@@ -302,15 +302,15 @@ class BatchPlanning(Document):
                     pass
 
         if self.slot_opening:
-            booked_slots_data = frappe.get_all(
+            planning_capacity_data = frappe.get_all(
                 "Slot Booking CT",
                 filters={"parent": self.slot_opening},
-                fields=["slot_booking_date", "booked_slots"]
+                fields=["slot_booking_date", "planning_capacity"]
             )
             booked_map = {}
-            for d in booked_slots_data:
+            for d in planning_capacity_data:
                 date_key = frappe.utils.getdate(d.slot_booking_date)
-                booked_map[date_key] = booked_map.get(date_key, 0) + (d.booked_slots or 0)
+                booked_map[date_key] = booked_map.get(date_key, 0) + (d.planning_capacity or 0)
             
             planned_map = {}
             for row in self.custom_batch_details or []:
