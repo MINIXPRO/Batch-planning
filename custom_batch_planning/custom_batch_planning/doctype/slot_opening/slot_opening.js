@@ -294,7 +294,7 @@ frappe.ui.form.on("Slot Opening", {
 
 			let intVal = parseInt(val, 10);
 			if (intVal != val) {
-				frappe.model.set_value(row.doctype, row.name, "planning_capacity", intVal);
+				row.planning_capacity = intVal;
 			}
 		});
 	},
@@ -447,13 +447,12 @@ function fetch_sct_remaining(frm) {
 				0,
 			);
 
-			let remained = db_total_available;
-			if (frm.is_new()) {
-				let current_planned = parseInt(frm.doc.total_batches_planned) || 0;
-				remained = db_total_available - current_planned;
-			}
+			let current_planned = parseInt(frm.doc.total_batches_planned) || 0;
+			let remained = db_total_available - current_planned;
 
-			frm.set_value("total_batch_remained", remained);
+			if (frm.doc.total_batch_remained !== remained) {
+				frm.set_value("total_batch_remained", remained);
+			}
 		},
 	});
 }
