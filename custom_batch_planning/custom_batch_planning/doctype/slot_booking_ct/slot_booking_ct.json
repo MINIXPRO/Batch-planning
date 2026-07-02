@@ -39,6 +39,15 @@
       "reqd": 1
     },
     {
+      "fieldname": "booked_slots",
+      "fieldtype": "Int",
+      "in_list_view": 0,
+      "label": "Booked Slots",
+      "non_negative": 1,
+      "read_only": 1,
+      "reqd": 0
+    },
+    {
       "fieldname": "availabe_capacity",
       "fieldtype": "Int",
       "in_list_view": 1,
