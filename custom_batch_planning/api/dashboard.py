@@ -7,7 +7,7 @@ def get_batch_dashboard_data(batch_planning=None):
 
     if batch_planning:
         filters.append([
-            "batch_planning_id",
+            "batch_planning",
             "like",
             f"%{batch_planning}%"
         ])
@@ -25,7 +25,7 @@ def get_batch_dashboard_data(batch_planning=None):
             "workflow_state",
             "batch_planning"
         ],
-        limit=100,
+        limit=1000,
         order_by="creation desc"
     )
 
@@ -82,15 +82,15 @@ def get_batch_dashboard_data(batch_planning=None):
         pi_map = {r.custom_batch_planning_no: r.cnt for r in pi_data}
 
     ma_map = {}
-    if bp_names:
+    if bp_parents:
         ma_data = frappe.db.sql(f"""
-            SELECT batches_planned, COUNT(*) as cnt
+            SELECT batch_planning, COUNT(*) as cnt
             FROM `tabMaterial Allocation`
-            WHERE batches_planned IN ({fmt})
+            WHERE batch_planning IN ({fmt_parents})
             AND docstatus IN (0, 1)
-            GROUP BY batches_planned
-        """, bp_names, as_dict=True)
-        ma_map = {r.batches_planned: r.cnt for r in ma_data}
+            GROUP BY batch_planning
+        """, bp_parents, as_dict=True)
+        ma_map = {r.batch_planning: r.cnt for r in ma_data}
 
     mr_pending_map = {}
     if bp_parents:
@@ -150,29 +150,37 @@ def get_batch_dashboard_data(batch_planning=None):
         """, bp_parents, as_dict=True)
         issue_map = {r.custom_batch_planning_no: r.cnt for r in issue_data}
 
-    result = []
+    result_dict = {}
     for bp in bps:
-        n = bp.name
         parent = bp.batch_planning
+        if not parent:
+            continue
+            
+        n = bp.name
 
-        result.append({
-            "name":              n,
-            "month":             bp.month or "-",
-            "batch_type":        bp.batch_type or "-",
-            "finished_item":     bp.finished_item or "-",
-            "status":            bp.workflow_state or "Draft",
-            "employee_name":     bp.employee_name or "-",
-            "employee_function": bp.employee_function or "-",
-            "mr_count":          mr_map.get(parent, 0) if parent else 0,
-            "po_count":          po_map.get(parent, 0) if parent else 0,
-            "grn_count":         grn_map.get(parent, 0) if parent else 0,
-            "pi_count":          pi_map.get(parent, 0) if parent else 0,
-            "ma_count":          ma_map.get(n, 0),
-            "pr_pending":        mr_pending_map.get(parent, 0) if parent else 0,
-            "po_pending":        po_pending_map.get(parent, 0) if parent else 0,
-            "pr_pending2":       pr_pending_map.get(parent, 0) if parent else 0,
-            "pi_pending":        pi_pending_map.get(parent, 0) if parent else 0,
-            "issue_count":       issue_map.get(parent, 0) if parent else 0
-        })
+        if parent not in result_dict:
+            result_dict[parent] = {
+                "name":              parent,
+                "batch_planning":    parent,
+                "batches_planned":   n,
+                "month":             bp.month or "-",
+                "batch_type":        bp.batch_type or "-",
+                "finished_item":     bp.finished_item or "-",
+                "status":            bp.workflow_state or "Draft",
+                "employee_name":     bp.employee_name or "-",
+                "employee_function": bp.employee_function or "-",
+                "mr_count":          mr_map.get(parent, 0),
+                "po_count":          po_map.get(parent, 0),
+                "grn_count":         grn_map.get(parent, 0),
+                "pi_count":          pi_map.get(parent, 0),
+                "ma_count":          ma_map.get(parent, 0),
+                "pr_pending":        mr_pending_map.get(parent, 0),
+                "po_pending":        po_pending_map.get(parent, 0),
+                "pr_pending2":       pr_pending_map.get(parent, 0),
+                "pi_pending":        pi_pending_map.get(parent, 0),
+                "issue_count":       issue_map.get(parent, 0)
+            }
+        else:
+            result_dict[parent]["batches_planned"] += f",{n}"
 
-    return result
+    return list(result_dict.values())

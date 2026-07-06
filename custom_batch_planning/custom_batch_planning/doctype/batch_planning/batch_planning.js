@@ -91,99 +91,123 @@ frappe.ui.form.on('Batch Planning', {
             render_stock_entry_tab(frm);
             render_item_issue_tab(frm);
 
+            // Check if the planning window has fully passed
+            let planning_passed = false;
+            if (frm.doc.slot_opening_table && frm.doc.slot_opening_table.length > 0) {
+                let latest_date = null;
+                frm.doc.slot_opening_table.forEach(row => {
+                    if (row.slot_booking_date) {
+                        let d = frappe.datetime.str_to_obj(row.slot_booking_date);
+                        if (!latest_date || d > latest_date) {
+                            latest_date = d;
+                        }
+                    }
+                });
+                
+                if (latest_date) {
+                    let today = frappe.datetime.str_to_obj(frappe.datetime.get_today());
+                    if (latest_date < today) {
+                        planning_passed = true;
+                    }
+                }
+            }
+
             frm.remove_custom_button(__("Run Material Planning"));
-            frm.add_custom_button(__("Run Material Planning"), function () {
-                render_material_planning_tab(frm);
-            }).addClass("btn-primary");
-
             frm.remove_custom_button(__("Material Allocation"), __("Create"));
-            frm.add_custom_button(__("Material Allocation"), function () {
-                frappe.call({
-                    method: "custom_batch_planning.custom_batch_planning.doctype.batch_planning.batch_planning.create_bulk_material_allocations",
-                    args: { batch_planning_name: frm.doc.name },
-                    freeze: true,
-                    freeze_message: __("Preparing Material Allocation..."),
-                    callback: function (r) {
-                        if (r.message) {
-                            if (r.message.warning) {
-                                frappe.msgprint({
-                                    title: __("Material Allocation Note"),
-                                    message: r.message.warning,
-                                    indicator: "orange"
-                                });
-                            }
-                            frappe.model.with_doctype("Material Allocation", function() {
-                                    let new_doc = frappe.model.get_new_doc("Material Allocation");
-                                    new_doc.batch_planning = r.message.batch_planning;
-                                    new_doc.batches_planned = r.message.batches_planned;
-                                    new_doc.employee_function = r.message.employee_function;
-                                    new_doc.project_id = r.message.project_id;
-                                    new_doc.project_name = r.message.project_name;
-                                    new_doc.workflow_state = "Draft";
-
-                                    if (r.message.material_allocation) {
-                                        r.message.material_allocation.forEach(function(row) {
-                                            let child = frappe.model.add_child(new_doc, "material_allocation");
-                                            child.item_code = row.item_code;
-                                            child.item_name = row.item_name;
-                                            child.uom = row.uom;
-                                            child.quantity_required = row.quantity_required;
-                                            child.allocate_qty = row.allocate_qty;
-                                            child.stock_available = row.stock_available;
-                                        });
-                                    }
-
-                                    frappe.set_route("Form", "Material Allocation", new_doc.name);
-                                });
-                        }
-                    }
-                });
-            }, __("Create"));
-
             frm.remove_custom_button(__("Material Request"), __("Create"));
-            frm.add_custom_button(__("Material Request"), function () {
-                frappe.call({
-                    method: "custom_batch_planning.custom_batch_planning.doctype.batch_planning.batch_planning.get_batch_wise_shortages",
-                    args: { doc_name: frm.doc.name },
-                    freeze: true,
-                    freeze_message: __("Calculating batch-wise shortages..."),
-                    callback: function (r) {
-                        let shortages = r.message || [];
-                        if (!shortages.length) {
-                            frappe.msgprint({
-                                title: __("No Shortage"),
-                                message: __("All items have sufficient stock. No Material Request needed."),
-                                indicator: "green",
-                            });
-                            return;
-                        }
 
-                        frappe.new_doc("Material Request", {
-                            material_request_type: "Manufacture",
-                            custom_employee_function: frm.doc.custom_employee_function,
-                            project: frm.doc.project,
-                            custom_batch_planning_no: frm.doc.name,
-                        }).then(() => {
-                            if (cur_frm) {
-                                cur_frm.set_value("project", frm.doc.project);
-                                cur_frm.set_value("custom_batch_planning_no", frm.doc.name);
-                                cur_frm.clear_table("items");
-                                shortages.forEach((item) => {
-                                    let row = cur_frm.add_child("items");
-                                    row.item_code = item.item_code;
-                                    row.qty = item.qty;
-                                    row.uom = item.uom;
-                                    row.conversion_factor = 1;
-                                    row.schedule_date = item.schedule_date;
-                                    row.custom_batch_planning_no = item.custom_batch_planning_no;
-                                    row.project = frm.doc.project;
-                                });
-                                cur_frm.refresh_field("items");
+            if (!planning_passed) {
+                frm.add_custom_button(__("Run Material Planning"), function () {
+                    render_material_planning_tab(frm);
+                }).addClass("btn-primary");
+
+                frm.add_custom_button(__("Material Allocation"), function () {
+                    frappe.call({
+                        method: "custom_batch_planning.custom_batch_planning.doctype.batch_planning.batch_planning.create_bulk_material_allocations",
+                        args: { batch_planning_name: frm.doc.name },
+                        freeze: true,
+                        freeze_message: __("Preparing Material Allocation..."),
+                        callback: function (r) {
+                            if (r.message) {
+                                if (r.message.warning) {
+                                    frappe.msgprint({
+                                        title: __("Material Allocation Note"),
+                                        message: r.message.warning,
+                                        indicator: "orange"
+                                    });
+                                }
+                                frappe.model.with_doctype("Material Allocation", function() {
+                                        let new_doc = frappe.model.get_new_doc("Material Allocation");
+                                        new_doc.batch_planning = r.message.batch_planning;
+                                        new_doc.batches_planned = r.message.batches_planned;
+                                        new_doc.employee_function = r.message.employee_function;
+                                        new_doc.project_id = r.message.project_id;
+                                        new_doc.project_name = r.message.project_name;
+                                        new_doc.workflow_state = "Draft";
+
+                                        if (r.message.material_allocation) {
+                                            r.message.material_allocation.forEach(function(row) {
+                                                let child = frappe.model.add_child(new_doc, "material_allocation");
+                                                child.item_code = row.item_code;
+                                                child.item_name = row.item_name;
+                                                child.uom = row.uom;
+                                                child.quantity_required = row.quantity_required;
+                                                child.allocate_qty = row.allocate_qty;
+                                                child.stock_available = row.stock_available;
+                                            });
+                                        }
+
+                                        frappe.set_route("Form", "Material Allocation", new_doc.name);
+                                    });
                             }
-                        });
-                    }
-                });
-            }, __("Create"));
+                        }
+                    });
+                }, __("Create"));
+
+                frm.add_custom_button(__("Material Request"), function () {
+                    frappe.call({
+                        method: "custom_batch_planning.custom_batch_planning.doctype.batch_planning.batch_planning.get_batch_wise_shortages",
+                        args: { doc_name: frm.doc.name },
+                        freeze: true,
+                        freeze_message: __("Calculating batch-wise shortages..."),
+                        callback: function (r) {
+                            let shortages = r.message || [];
+                            if (!shortages.length) {
+                                frappe.msgprint({
+                                    title: __("No Shortage"),
+                                    message: __("All items have sufficient stock. No Material Request needed."),
+                                    indicator: "green",
+                                });
+                                return;
+                            }
+
+                            frappe.new_doc("Material Request", {
+                                material_request_type: "Manufacture",
+                                custom_employee_function: frm.doc.custom_employee_function,
+                                project: frm.doc.project,
+                                custom_batch_planning_no: frm.doc.name,
+                            }).then(() => {
+                                if (cur_frm) {
+                                    cur_frm.set_value("project", frm.doc.project);
+                                    cur_frm.set_value("custom_batch_planning_no", frm.doc.name);
+                                    cur_frm.clear_table("items");
+                                    shortages.forEach((item) => {
+                                        let row = cur_frm.add_child("items");
+                                        row.item_code = item.item_code;
+                                        row.qty = item.qty;
+                                        row.uom = item.uom;
+                                        row.conversion_factor = 1;
+                                        row.schedule_date = item.schedule_date;
+                                        row.custom_batch_planning_no = item.custom_batch_planning_no;
+                                        row.project = frm.doc.project;
+                                    });
+                                    cur_frm.refresh_field("items");
+                                }
+                            });
+                        }
+                    });
+                }, __("Create"));
+            }
 
         } else {
             frm.remove_custom_button(__("Run Material Planning"));

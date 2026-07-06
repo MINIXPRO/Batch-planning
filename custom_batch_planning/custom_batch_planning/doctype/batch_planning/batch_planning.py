@@ -169,13 +169,12 @@ class BatchPlanning(Document):
         if self.month:
             mm = MONTH_MAP.get(self.month.strip().lower())
 
-        if not mm and self.slot_opening:
+        if self.slot_opening:
             first_date = frappe.db.sql(
                 """
                 SELECT MIN(slot_booking_date) AS d
                 FROM `tabSlot Booking CT`
                 WHERE parent = %s
-                  AND slot_booking_date >= CURDATE()
             """,
                 self.slot_opening,
                 as_dict=True,
@@ -183,8 +182,10 @@ class BatchPlanning(Document):
 
             if first_date and first_date[0].d:
                 dt = getdate(first_date[0].d)
-                mm = str(dt.month).zfill(2)
-                yy = str(dt.year)[2:]
+                if not mm:
+                    mm = str(dt.month).zfill(2)
+                if not yy:
+                    yy = str(dt.year)[2:]
 
         if not mm:
             dt = getdate(frappe.utils.today())
@@ -217,6 +218,9 @@ class BatchPlanning(Document):
         self.name = candidate
 
     def validate(self):
+        if not self.slot_opening:
+            frappe.throw("Slot Opening is mandatory.")
+
         if self.slot_opening and not self.custom_employee_function:
             frappe.throw(
                 "Please select an Employee Function first before selecting a Slot Opening."

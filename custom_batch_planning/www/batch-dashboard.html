@@ -628,13 +628,7 @@
                     <div class="value" id="stat-ma">-</div>
                 </div>
             </div>
-            <div class="stat-card sc-orange">
-                <div class="stat-icon">🏭</div>
-                <div class="stat-info">
-                    <div class="label">Material Issued</div>
-                    <div class="value" id="stat-issues">-</div>
-                </div>
-            </div>
+
             <div class="stat-card sc-brown">
                 <div class="stat-icon">⏳</div>
                 <div class="stat-info">
@@ -652,6 +646,12 @@
                 <div class="filter-group">
                     <label>Planned Batches</label>
                     <input type="text" id="bp-filter" placeholder="Search batch…" oninput="debounceFilter()">
+                </div>
+
+                <div class="filter-group">
+                    <label>Employee</label>
+                    <input type="text" id="emp-filter" list="emp-list" placeholder="Search Employee..." onchange="filterTable()" onkeyup="debounceFilter()">
+                    <datalist id="emp-list"></datalist>
                 </div>
 
                 <div class="filter-group">
@@ -683,17 +683,7 @@
                     </select>
                 </div>
 
-                <div class="filter-group">
-                    <label>Status</label>
-                    <select id="status-filter" onchange="filterTable()">
-                        <option value="">All Status</option>
-                        <option value="Draft">Draft</option>
-                        <option value="Pending Approval">Pending Approval</option>
-                        <option value="Approved">Approved</option>
-                        <option value="Rejected">Rejected</option>
-                        <option value="Cancelled">Cancelled</option>
-                    </select>
-                </div>
+
 
                 <div class="filter-group">
                     <label>MR Status</label>
@@ -797,6 +787,20 @@
                     updateTopStats([]);
                 } else {
                     allData = data;
+                    
+                    // Populate Employee filter mapping employee_function -> employee_name
+                    const empMap = new Map();
+                    allData.forEach(d => {
+                        if (d.employee_name && d.employee_function) {
+                            empMap.set(d.employee_function, d.employee_name);
+                        }
+                    });
+                    const empFilter = document.getElementById('emp-list');
+                    empFilter.innerHTML = '';
+                    Array.from(empMap.entries()).sort((a, b) => a[1].localeCompare(b[1])).forEach(([func, name]) => {
+                        empFilter.innerHTML += `<option value="${name}"></option>`;
+                    });
+
                     filterTable();
                 }
                 const now = new Date();
@@ -818,18 +822,18 @@
             const bp = document.getElementById('bp-filter').value.trim().toLowerCase();
             const month = document.getElementById('month-filter').value;
             const type = document.getElementById('type-filter').value;
-            const statusF = document.getElementById('status-filter').value;
             const mrF = document.getElementById('mr-filter').value;
             const poF = document.getElementById('po-filter').value;
             const prF = document.getElementById('pr-filter').value;
             const piF = document.getElementById('pi-filter').value;
+            const empF = document.getElementById('emp-filter').value.trim().toLowerCase();
 
             const filtered = allData.filter(b => {
                 // bp search against name field (frappe document name)
                 if (bp && !b.name.toLowerCase().includes(bp)) return false;
                 if (month && b.month !== month) return false;
                 if (type && b.batch_type !== type) return false;
-                if (statusF && b.status !== statusF) return false;
+                if (empF && (!b.employee_name || !b.employee_name.toLowerCase().includes(empF)) && (!b.employee_function || !b.employee_function.toLowerCase().includes(empF))) return false;
                 // MR pending = pr_pending (MRs not converted to PO)
                 if (mrF === 'pending' && !(b.pr_pending > 0)) return false;
                 if (mrF === 'completed' && b.pr_pending > 0) return false;
@@ -886,7 +890,7 @@
                 rows += `
                 <tr>
                     <td><span class="row-num">${i + 1}</span></td>
-                    <td><a href="/app/batches-planned/${r.name}" target="_blank">${r.name}</a></td>
+                    <td><a href="/app/batch-planning/${r.batch_planning}" target="_blank">${r.name}</a></td>
                     <td>${r.month || '—'}</td>
                     <td>${typeBadge(r.batch_type)}</td>
                     <td>${statusBadge(r.status)}</td>
@@ -900,7 +904,6 @@
                     <td>${cnt(r.po_pending, 'cnt-red')}</td>
                     <td>${cnt(r.pr_pending2, 'cnt-orange')}</td>
                     <td>${cnt(r.pi_pending, 'cnt-red')}</td>
-                    <td>${cnt(r.issue_count || 0, 'cnt-orange')}</td>
                 </tr>`;
             });
 
@@ -924,7 +927,6 @@
                         <th title="PO delivery pending">PO Pending</th>
                         <th title="Purchase Receipts not submitted">PR Pending</th>
                         <th title="Purchase Invoices not submitted">PI Pending</th>
-                        <th title="Material Issues from Store">Issues</th>
                     </tr>
                 </thead>
                 <tbody>${rows}</tbody>
@@ -932,19 +934,18 @@
             </div>
             <div class="table-footer">
                 <span>Showing <strong>${data.length}</strong> of <strong>${allData.length}</strong> batches</span>
-                <span style="font-size:11px;color:#bbb;">Fields: name · month · batch_type · status · finished_item · mr_count · po_count · grn_count · pi_count · ma_count · pr_pending · po_pending · pr_pending2 · pi_pending · issue_count</span>
+                <span style="font-size:11px;color:#bbb;">Fields: name · month · batch_type · status · finished_item · mr_count · po_count · grn_count · pi_count · ma_count · pr_pending · po_pending · pr_pending2 · pi_pending</span>
             </div>`;
         }
 
         function updateTopStats(data) {
-            let mr = 0, po = 0, grn = 0, pi = 0, ma = 0, issues = 0, poPending = 0;
+            let mr = 0, po = 0, grn = 0, pi = 0, ma = 0, poPending = 0;
             for (const r of data) {
                 mr += r.mr_count || 0;
                 po += r.po_count || 0;
                 grn += r.grn_count || 0;
                 pi += r.pi_count || 0;
                 ma += r.ma_count || 0;
-                issues += r.issue_count || 0;
                 poPending += r.po_pending || 0;
             }
             document.getElementById('stat-total').textContent = data.length;
@@ -953,7 +954,6 @@
             document.getElementById('stat-grn').textContent = grn;
             document.getElementById('stat-pi').textContent = pi;
             document.getElementById('stat-ma').textContent = ma;
-            document.getElementById('stat-issues').textContent = issues;
             document.getElementById('stat-po-pending').textContent = poPending;
         }
 

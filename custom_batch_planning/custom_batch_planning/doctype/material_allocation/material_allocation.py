@@ -6,6 +6,8 @@ from frappe.utils import flt, getdate, today, now
 class MaterialAllocation(Document):
 
     def validate(self):
+        self.validate_planning_window()
+        self.check_batch_planning_allocation_limit()
         for item in self.material_allocation:
             qty_requested = flt(item.allocate_qty)
             bom_qty = flt(item.quantity_required)
@@ -22,6 +24,52 @@ class MaterialAllocation(Document):
             if qty_requested != bom_qty and not (item.reason or "").strip():
                 frappe.throw(
                     f"Row #{item.idx}: Reason is mandatory because Qty Requested ({qty_requested}) differs from Consolidated BOM Qty ({bom_qty}) for item {item.item_code}."
+                )
+
+    def check_batch_planning_allocation_limit(self):
+        if not self.batch_planning:
+            return
+            
+        for item in self.material_allocation:
+            query = """
+                SELECT IFNULL(SUM(mai.allocate_qty), 0)
+                FROM `tabMaterial Allocation Item` mai
+                INNER JOIN `tabMaterial Allocation` ma ON ma.name = mai.parent
+                WHERE mai.item_code = %s 
+                AND ma.batch_planning = %s
+                AND ma.name != %s
+                AND ma.docstatus != 2
+                AND ma.allocation_status NOT IN ('Deallocated', 'Stock Entry Done')
+                FOR UPDATE
+            """
+            
+            already_allocated = flt(frappe.db.sql(query, (item.item_code, self.batch_planning, self.name or ""))[0][0])
+            total = already_allocated + flt(item.allocate_qty)
+            
+            if total > flt(item.quantity_required):
+                frappe.throw(
+                    f"Row #{item.idx}: Total allocate quantity ({total}) exceeds quantity_required ({item.quantity_required}) for item {item.item_code}. "
+                    f"(Already allocated across other documents: {already_allocated}, Requested here: {item.allocate_qty})"
+                )
+
+    def validate_planning_window(self):
+        if not self.batch_planning:
+            return
+        
+        latest_date = frappe.db.sql(
+            """
+            SELECT MAX(slot_booking_date)
+            FROM `tabSlot Booking CT`
+            WHERE parent = %s AND parenttype = 'Batch Planning'
+            """,
+            (self.batch_planning,)
+        )
+        
+        if latest_date and latest_date[0][0]:
+            d = getdate(latest_date[0][0])
+            if d < getdate(today()):
+                frappe.throw(
+                    f"Material Allocation cannot be saved because the planning window for Batch Planning <b>{self.batch_planning}</b> (last date: {d}) has already passed."
                 )
 
     @frappe.whitelist()
@@ -105,7 +153,8 @@ class MaterialAllocation(Document):
         if existing_se:
             frappe.throw(
                 f"⛔ Deallocation blocked. Stock Entry <b>{existing_se}</b> has already been "
-                f"submitted. Items have been sent for manufacturing."
+                f"submitted. Items have been sent for manufacturing. "
+                f"Please cancel the Stock Entry first."
             )
 
         for item in self.material_allocation:
