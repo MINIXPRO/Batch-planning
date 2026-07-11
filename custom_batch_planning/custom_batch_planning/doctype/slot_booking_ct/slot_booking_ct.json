@@ -10,6 +10,7 @@
     "slot_booking_date",
     "total_slots",
     "planning_capacity",
+    "booked_slots",
     "availabe_capacity",
     "reason"
   ],
@@ -27,7 +28,8 @@
       "in_list_view": 1,
       "label": "Total Day Capacity",
       "non_negative": 1,
-      "read_only": 1
+      "read_only": 1,
+      "default": "0"
     },
     {
       "fieldname": "planning_capacity",
@@ -45,7 +47,8 @@
       "label": "Booked Slots",
       "non_negative": 1,
       "read_only": 1,
-      "reqd": 0
+      "reqd": 0,
+      "default": "0"
     },
     {
       "fieldname": "availabe_capacity",
@@ -68,7 +71,7 @@
   "index_web_pages_for_search": 1,
   "istable": 1,
   "links": [],
-  "modified": "2026-06-01 00:00:00.000000",
+  "modified": "2026-07-11 00:00:00.000000",
   "modified_by": "Administrator",
   "module": "Custom Batch Planning",
   "name": "Slot Booking CT",
