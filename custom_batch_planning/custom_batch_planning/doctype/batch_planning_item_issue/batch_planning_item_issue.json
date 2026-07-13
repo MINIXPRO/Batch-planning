@@ -50,9 +50,8 @@
   },
   {
    "fieldname": "stock_entry",
-   "fieldtype": "Link",
-   "label": "Stock Entry",
-   "options": "Stock Entry"
+   "fieldtype": "Small Text",
+   "label": "Stock Entry"
   }
  ],
  "index_web_pages_for_search": 1,

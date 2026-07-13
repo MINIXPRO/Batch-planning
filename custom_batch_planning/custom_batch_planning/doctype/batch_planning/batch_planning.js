@@ -182,7 +182,7 @@ frappe.ui.form.on('Batch Planning', {
                             }
 
                             frappe.new_doc("Material Request", {
-                                material_request_type: "Manufacture",
+                                material_request_type: "Purchase",
                                 custom_employee_function: frm.doc.custom_employee_function,
                                 project: frm.doc.project,
                                 custom_batch_planning_no: frm.doc.name,
@@ -199,6 +199,7 @@ frappe.ui.form.on('Batch Planning', {
                                         row.conversion_factor = 1;
                                         row.schedule_date = item.schedule_date;
                                         row.custom_batch_planning_no = item.custom_batch_planning_no;
+                                        row.batch_planning_id = item.custom_batch_planning_no;
                                         row.project = frm.doc.project;
                                     });
                                     cur_frm.refresh_field("items");
@@ -1416,66 +1417,62 @@ function render_material_planning_tab(frm) {
             let rows_html = data.map((row, i) => {
                 let bg = i % 2 === 0 ? "#f9fafb" : "#ffffff";
 
-                let mr_qty_sum = parseFloat(row.global_mr_qty || 0) + parseFloat(row.bp_mr_qty || 0);
-                let po_qty_sum = parseFloat(row.global_po_qty || 0) + parseFloat(row.bp_po_qty || 0);
-                let grn_qty_sum = parseFloat(row.global_grn_qty || 0) + parseFloat(row.bp_grn_qty || 0);
-
+                let mr_qty = parseFloat(row.bp_mr_qty || 0);
+                let mr_count = parseInt(row.bp_mr_count || 0);
+                let mr_docs = row.bp_mr_docs || [];
                 let mr_td = "";
-                if (mr_qty_sum > 0) {
+                if (mr_qty > 0) {
+                    let docs_json = JSON.stringify(mr_docs).replace(/"/g, '&quot;');
                     mr_td = `
                         <td style="padding:9px 10px; text-align:center; font-weight:700; cursor:pointer; color:#1f2937;"
-                            onclick="frappe.set_route('List', 'Material Request', {
-                                'custom_employee_function': '${frm.doc.custom_employee_function || ""}',
-                                'docstatus': 1,
-                                'Material Request Item.item_code': '${row.item_code}'
-                            })">
-                            <span>${format_qty_val(row.global_mr_qty)}</span> <span style="color:#16a34a;">(${format_qty_val(row.bp_mr_qty)})</span>
+                            onclick="frappe.set_route('List', 'Material Request', {'name': ['in', ${docs_json}]})">
+                            <span style="color:#16a34a;">${format_qty_val(mr_qty)} (${mr_count})</span>
                         </td>
                     `;
                 } else {
                     mr_td = `
                         <td style="padding:9px 10px; text-align:center; font-weight:700; color:#9ca3af;">
-                            <span>${format_qty_val(row.global_mr_qty)}</span> <span style="color:#d1d5db;">(${format_qty_val(row.bp_mr_qty)})</span>
+                            <span style="color:#d1d5db;">0 (0)</span>
                         </td>
                     `;
                 }
 
+                let po_qty = parseFloat(row.bp_po_qty || 0);
+                let po_count = parseInt(row.bp_po_count || 0);
+                let po_docs = row.bp_po_docs || [];
                 let po_td = "";
-                if (po_qty_sum > 0) {
+                if (po_qty > 0) {
+                    let docs_json = JSON.stringify(po_docs).replace(/"/g, '&quot;');
                     po_td = `
                         <td style="padding:9px 10px; text-align:center; font-weight:700; cursor:pointer; color:#1f2937;"
-                            onclick="frappe.set_route('List', 'Purchase Order', {
-                                'employee_function': '${frm.doc.custom_employee_function || ""}',
-                                'docstatus': 1,
-                                'Purchase Order Item.item_code': '${row.item_code}'
-                            })">
-                            <span>${format_qty_val(row.global_po_qty)}</span> <span style="color:#16a34a;">(${format_qty_val(row.bp_po_qty)})</span>
+                            onclick="frappe.set_route('List', 'Purchase Order', {'name': ['in', ${docs_json}]})">
+                            <span style="color:#16a34a;">${format_qty_val(po_qty)} (${po_count})</span>
                         </td>
                     `;
                 } else {
                     po_td = `
                         <td style="padding:9px 10px; text-align:center; font-weight:700; color:#9ca3af;">
-                            <span>${format_qty_val(row.global_po_qty)}</span> <span style="color:#d1d5db;">(${format_qty_val(row.bp_po_qty)})</span>
+                            <span style="color:#d1d5db;">0 (0)</span>
                         </td>
                     `;
                 }
 
-                let grn_td = "";
-                if (grn_qty_sum > 0) {
-                    grn_td = `
+                let pr_qty = parseFloat(row.bp_pr_qty || 0);
+                let pr_count = parseInt(row.bp_pr_count || 0);
+                let pr_docs = row.bp_pr_docs || [];
+                let pr_td = "";
+                if (pr_qty > 0) {
+                    let docs_json = JSON.stringify(pr_docs).replace(/"/g, '&quot;');
+                    pr_td = `
                         <td style="padding:9px 10px; text-align:center; font-weight:700; cursor:pointer; color:#1f2937;"
-                            onclick="frappe.set_route('List', 'Purchase Receipt', {
-                                'employee_function': '${frm.doc.custom_employee_function || ""}',
-                                'docstatus': 1,
-                                'Purchase Receipt Item.item_code': '${row.item_code}'
-                            })">
-                            <span>${format_qty_val(row.global_grn_qty)}</span> <span style="color:#16a34a;">(${format_qty_val(row.bp_grn_qty)})</span>
+                            onclick="frappe.set_route('List', 'Purchase Receipt', {'name': ['in', ${docs_json}]})">
+                            <span style="color:#16a34a;">${format_qty_val(pr_qty)} (${pr_count})</span>
                         </td>
                     `;
                 } else {
-                    grn_td = `
+                    pr_td = `
                         <td style="padding:9px 10px; text-align:center; font-weight:700; color:#9ca3af;">
-                            <span>${format_qty_val(row.global_grn_qty)}</span> <span style="color:#d1d5db;">(${format_qty_val(row.bp_grn_qty)})</span>
+                            <span style="color:#d1d5db;">0 (0)</span>
                         </td>
                     `;
                 }
@@ -1494,7 +1491,7 @@ function render_material_planning_tab(frm) {
                         <td style="padding:9px 10px; text-align:center; font-weight:700; color:#7c3aed; font-size:12px;">${format_qty_val(row.lab_stock)}</td>
                         ${mr_td}
                         ${po_td}
-                        ${grn_td}
+                        ${pr_td}
                         <td style="padding:9px 10px; text-align:center; font-weight:700; font-size:12px; color:${parseFloat(row.net_requirement || 0) > 0 ? "#dc2626" : "#15803d"};">${format_qty_val(row.net_requirement)}</td>
                         <td style="padding:9px 10px; text-align:center; font-weight:700; color:#15803d; font-size:12px;">${format_qty_val(row.usable_qty)}</td>
                         <td style="padding:9px 10px; text-align:center; font-weight:700; color:#dc2626; font-size:12px;">${format_qty_val(row.expired_qty)}</td>
@@ -1528,7 +1525,7 @@ function render_material_planning_tab(frm) {
                                     <th style="${th_style()}">Lab Wise</th>
                                     <th style="${th_style()}">Open MR</th>
                                     <th style="${th_style()}">Open PO</th>
-                                    <th style="${th_style()}">Open PR</th>
+                                    <th style="${th_style()}">Open PR/GRN</th>
                                     <th style="${th_style()}">Net Req</th>
                                     <th style="${th_style()}">Usable</th>
                                     <th style="${th_style()}">Expired Qty</th>

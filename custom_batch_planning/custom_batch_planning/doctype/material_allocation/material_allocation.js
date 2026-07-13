@@ -352,6 +352,8 @@ window.refresh_stock_available = function (frm) {
                     args: {
                         item_code: row.item_code,
                         employee_function: frm.doc.employee_function,
+                        batch_planning: frm.doc.batch_planning,
+                        project: frm.doc.project_id,
                         exclude_parent: frm.doc.name,
                         row_name: row.name,
                     },

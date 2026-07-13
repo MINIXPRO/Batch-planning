@@ -66,7 +66,7 @@ read-only once allocation begins.
 ### Net Requirement Calculation
 ```
 Net Requirement = max(
-    total_qty_required - free_stock - open_mr_qty - open_po_qty - open_grn_qty,
+    qty_required - main_stock - lab_stock - open_mr_qty - open_po_qty,
     0
 )
 ```

@@ -293,7 +293,8 @@ doc_events = {
     },
     "Purchase Receipt": {
         "before_save": "custom_batch_planning.api.pr_integration.map_purchase_receipt_fields",
-        "before_insert": "custom_batch_planning.hooks_po_grn.set_batch_planning_id_on_grn"
+        "before_insert": "custom_batch_planning.hooks_po_grn.set_batch_planning_id_on_grn",
+        "on_submit": "custom_batch_planning.custom_batch_planning.doctype.batch_planning.batch_planning.sync_batch_expiry_from_grn"
     },
     "Stock Entry": {
         "before_save": "custom_batch_planning.api.pr_integration.map_stock_entry_fields",
@@ -301,5 +302,8 @@ doc_events = {
     },
     "Purchase Invoice": {
         "validate": "custom_batch_planning.api.pr_integration.map_purchase_invoice_fields"
+    },
+    "Stock Ledger Entry": {
+        "before_save": "custom_batch_planning.api.pr_integration.map_sle_fields"
     }
 }

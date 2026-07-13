@@ -13,6 +13,13 @@ class MaterialAllocation(Document):
             bom_qty = flt(item.quantity_required)
             stock = flt(item.stock_available)
 
+            if qty_requested < 1:
+                frappe.throw(
+                    f"Row #{item.idx}: Qty Requested for item {item.item_code} "
+                    f"must be at least 1. Please remove this row or enter a valid "
+                    f"quantity — 0 is not allowed."
+                )
+
             if qty_requested > stock:
                 frappe.throw(
                     f"Row #{item.idx}: Stock Available ({stock}) is less than Qty Requested ({qty_requested}) for item {item.item_code}."
@@ -147,15 +154,23 @@ class MaterialAllocation(Document):
 
         existing_se = frappe.db.get_value(
             "Stock Entry",
-            {"custom_material_allocation": self.name, "docstatus": 1},
-            "name",
+            {"custom_material_allocation": self.name, "docstatus": ["!=", 2]},
+            ["name", "docstatus"],
+            as_dict=True,
         )
         if existing_se:
-            frappe.throw(
-                f"⛔ Deallocation blocked. Stock Entry <b>{existing_se}</b> has already been "
-                f"submitted. Items have been sent for manufacturing. "
-                f"Please cancel the Stock Entry first."
-            )
+            if existing_se.docstatus == 1:
+                frappe.throw(
+                    f"⛔ Deallocation blocked. Stock Entry <b>{existing_se.name}</b> has already been "
+                    f"submitted. Items have been sent for manufacturing. "
+                    f"Please cancel the Stock Entry first."
+                )
+            else:
+                frappe.throw(
+                    f"⛔ Deallocation blocked. A Draft Stock Entry <b>{existing_se.name}</b> exists "
+                    f"for this allocation. Please cancel or delete the Draft Stock Entry first, "
+                    f"or submit it if the transfer should proceed."
+                )
 
         for item in self.material_allocation:
             item.qty_allocated = 0
@@ -289,7 +304,7 @@ class MaterialAllocation(Document):
         """, (self.name, item_code, warehouse, self.name), as_dict=True)
 
 @frappe.whitelist()
-def ma_get_allocated_qty(item_code, employee_function, exclude_parent=None, row_name=None):
+def ma_get_allocated_qty(item_code, employee_function, batch_planning, project, exclude_parent=None, row_name=None):
     warehouse = None
     ef_doc = frappe.get_doc("Employee Function", employee_function)
     for row in ef_doc.get("table_bukm"):
@@ -300,17 +315,23 @@ def ma_get_allocated_qty(item_code, employee_function, exclude_parent=None, row_
     if not warehouse:
         return {"free_stock": 0, "allocated_qty": 0}
 
-    total_stock = flt(frappe.db.get_value("Bin", {"item_code": item_code, "warehouse": warehouse}, "actual_qty"))
+    stock_query = """
+        SELECT SUM(actual_qty) FROM `tabStock Ledger Entry`
+        WHERE item_code = %s AND warehouse = %s
+        AND batch_planning_id = %s AND project = %s AND is_cancelled = 0
+    """
+    total_stock = flt(frappe.db.sql(stock_query, (item_code, warehouse, batch_planning, project))[0][0])
 
     query = """
         SELECT SUM(mai.qty_allocated)
         FROM `tabMaterial Allocation Item` mai
         INNER JOIN `tabMaterial Allocation` ma ON ma.name = mai.parent
         WHERE mai.item_code = %s AND ma.employee_function = %s
+        AND ma.batch_planning = %s
         AND ma.allocation_status NOT IN ('Deallocated', 'Stock Entry Done')
         AND ma.docstatus != 2
     """
-    args = [item_code, employee_function]
+    args = [item_code, employee_function, batch_planning]
     if exclude_parent:
         query += " AND ma.name != %s"
         args.append(exclude_parent)

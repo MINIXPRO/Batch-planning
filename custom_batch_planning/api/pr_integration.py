@@ -96,6 +96,11 @@ def map_stock_entry_fields(doc, method=None):
     """
     consolidate_items_table(doc)
 
+    # Ensure custom dimensions are copied to the target fields so incoming SLEs get the correct values
+    for item in doc.items:
+        if item.batch_planning_id and not item.to_batch_planning_id:
+            item.to_batch_planning_id = item.batch_planning_id
+
     if doc.get("custom_batch_planning_no"):
         return
 
@@ -152,3 +157,19 @@ def map_purchase_invoice_fields(doc, method=None):
         if val and frappe.db.exists("Batch Planning", val):
             doc.custom_batch_planning_no = val
             return
+
+def map_sle_fields(doc, method=None):
+    """
+    Ensure custom dimensions like batch_planning_id propagate to both legs (s_warehouse and t_warehouse)
+    of the Stock Ledger Entry for Stock Entries (e.g. Material Transfers).
+    """
+    if doc.voucher_type == "Stock Entry" and doc.voucher_detail_no:
+        frappe.log_error(title="map_sle_fields hook executed", message=f"SLE: {doc.name}, detail: {doc.voucher_detail_no}")
+        if not doc.batch_planning_id:
+            bp_id = frappe.db.get_value("Stock Entry Detail", doc.voucher_detail_no, "batch_planning_id")
+            if bp_id:
+                doc.batch_planning_id = bp_id
+        if not doc.project:
+            proj = frappe.db.get_value("Stock Entry Detail", doc.voucher_detail_no, "project")
+            if proj:
+                doc.project = proj

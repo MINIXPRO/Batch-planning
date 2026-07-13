@@ -1,8 +1,8 @@
 import json
 import frappe
 from frappe.model.document import Document
-from frappe.utils import getdate, flt
 from frappe.model.naming import make_autoname
+from frappe.utils import getdate, flt, add_months
 
 ENABLE_AFTER_SUBMIT_LOGIC = True
 
@@ -496,25 +496,15 @@ def create_bulk_material_allocations(batch_planning_name):
         item_code = item["item_code"]
         qty_required = flt(item["qty"])
 
-        free_stock = flt(frappe.db.sql("""
-            SELECT IFNULL(SUM(actual_qty), 0)
-            FROM `tabStock Ledger Entry`
-            WHERE item_code = %s
-            AND warehouse = %s
-            AND (batch_planning_id IS NULL OR batch_planning_id = '')
-            AND is_cancelled = 0
-        """, (item_code, warehouse))[0][0] or 0.0)
-
-        bp_tagged_stock = flt(frappe.db.sql("""
+        stock_qty = flt(frappe.db.sql("""
             SELECT IFNULL(SUM(actual_qty), 0)
             FROM `tabStock Ledger Entry`
             WHERE item_code = %s
             AND warehouse = %s
             AND batch_planning_id = %s
+            AND project = %s
             AND is_cancelled = 0
-        """, (item_code, warehouse, batch_planning_name))[0][0] or 0.0)
-
-        stock_qty = free_stock + bp_tagged_stock
+        """, (item_code, warehouse, batch_planning_name, parent_doc.project))[0][0] or 0.0)
 
         allocated_qty = (
             frappe.db.sql(
@@ -524,13 +514,18 @@ def create_bulk_material_allocations(batch_planning_name):
             INNER JOIN `tabMaterial Allocation` ma ON ma.name = mai.parent
             WHERE mai.item_code = %s
             AND ma.employee_function = %s
+            AND ma.batch_planning = %s
             AND ma.allocation_status NOT IN ('Deallocated', 'Stock Entry Done')
             AND ma.docstatus != 2
         """,
-                (item_code, parent_doc.custom_employee_function),
+                (item_code, parent_doc.custom_employee_function, batch_planning_name),
             )[0][0]
             or 0
         )
+
+        available_stock = stock_qty - allocated_qty
+        if available_stock <= 0:
+            continue
 
         ma_data["material_allocation"].append({
             "doctype": "Material Allocation Item",
@@ -540,9 +535,12 @@ def create_bulk_material_allocations(batch_planning_name):
             "item_name": item["item_name"],
             "uom": item["uom"],
             "quantity_required": qty_required,
-            "allocate_qty": qty_required,
-            "stock_available": stock_qty
+            "allocate_qty": min(qty_required, available_stock),
+            "stock_available": available_stock
         })
+
+    if not ma_data["material_allocation"]:
+        frappe.throw("No items have available free stock to allocate. Material Allocation cannot be created.")
     if warning_message:
         ma_data["warning"] = warning_message
     return ma_data
@@ -640,9 +638,7 @@ def get_material_planning_data(doc_name):
     if not warehouse:
         frappe.throw(f"No store warehouse found in Employee Function '{employee_function}'.")
 
-    lab_warehouses = [
-        r.lab_warehouse for r in (ef_doc.get("table_szrn") or []) if r.lab_warehouse
-    ]
+
 
     batches_data = []
     for row in doc.custom_batch_details or []:
@@ -687,11 +683,31 @@ def get_material_planning_data(doc_name):
         item_code = item.get("item_code")
         qty_required = flt(item.get("qty"))
 
-        main_stock = flt(frappe.db.get_value("Bin", {"item_code": item_code, "warehouse": warehouse}, "actual_qty"))
+        main_stock = flt(frappe.db.sql(
+            """
+            SELECT IFNULL(SUM(actual_qty), 0)
+            FROM `tabStock Ledger Entry`
+            WHERE item_code = %s
+            AND warehouse = %s
+            AND batch_planning_id = %s
+            AND project = %s
+            AND is_cancelled = 0
+            """,
+            (item_code, warehouse, doc.name, doc.project)
+        )[0][0] or 0.0)
 
-        lab_stock = 0.0
-        for lab_wh in lab_warehouses:
-            lab_stock += flt(frappe.db.get_value("Bin", {"item_code": item_code, "warehouse": lab_wh}, "actual_qty"))
+        lab_stock = flt(frappe.db.sql(
+            """
+            SELECT IFNULL(SUM(actual_qty), 0)
+            FROM `tabStock Ledger Entry`
+            WHERE item_code = %s
+            AND warehouse != %s
+            AND batch_planning_id = %s
+            AND project = %s
+            AND is_cancelled = 0
+            """,
+            (item_code, warehouse, doc.name, doc.project)
+        )[0][0] or 0.0)
 
         total_stock = main_stock + lab_stock
 
@@ -702,162 +718,132 @@ def get_material_planning_data(doc_name):
             FROM `tabMaterial Allocation Item` mai
             INNER JOIN `tabMaterial Allocation` ma ON ma.name = mai.parent
             WHERE mai.item_code = %s
-            AND ma.employee_function = %s
+            AND ma.batch_planning = %s
+            AND ma.project_id = %s
             AND ma.allocation_status NOT IN ('Deallocated', 'Stock Entry Done')
             AND ma.docstatus != 2
         """,
-                (item_code, employee_function),
+                (item_code, doc.name, doc.project),
             )[0][0]
             or 0
         )
 
-        free_stock = flt(frappe.db.sql(
+        free_stock = max(main_stock - allocated_qty, 0.0)
+        # Calculate usable and expired quantities with a 3‑month safety cushion
+        cutoff_date = getdate(add_months(frappe.utils.today(), 3))
+        batch_rows = frappe.db.sql(
             """
-            SELECT IFNULL(SUM(actual_qty), 0)
-            FROM `tabStock Ledger Entry`
-            WHERE item_code = %s
-            AND warehouse = %s
-            AND (batch_planning_id IS NULL OR batch_planning_id = '')
-            AND is_cancelled = 0
-            """,
-            (item_code, warehouse)
-        )[0][0] or 0.0)
-        free_stock = max(free_stock, 0.0)
+            SELECT b.expiry_date, IFNULL(SUM(sbe.qty), 0) AS qty
+            FROM `tabStock Ledger Entry` sle
+            INNER JOIN `tabSerial and Batch Entry` sbe
+                ON sbe.parent = sle.serial_and_batch_bundle
+            INNER JOIN `tabBatch` b ON b.name = sbe.batch_no
+            WHERE sle.item_code = %s
+              AND sle.batch_planning_id = %s
+              AND sle.project = %s
+              AND sle.is_cancelled = 0
+              AND sle.serial_and_batch_bundle IS NOT NULL
+            GROUP BY b.expiry_date
 
-        stock_available = flt(frappe.db.sql(
-            """
-            SELECT IFNULL(SUM(actual_qty), 0)
-            FROM `tabStock Ledger Entry`
-            WHERE item_code = %s
-            AND warehouse = %s
-            AND (
-                batch_planning_id IS NULL
-                OR batch_planning_id = ''
-                OR batch_planning_id = %s
-            )
-            AND is_cancelled = 0
-            """,
-            (item_code, warehouse, doc.name)
-        )[0][0] or 0.0)
-        stock_available = max(stock_available, 0.0)
+            UNION ALL
 
-        global_mr_qty = flt(frappe.db.sql(
-            """
-            SELECT IFNULL(SUM(mri.qty - mri.ordered_qty), 0)
-            FROM `tabMaterial Request Item` mri
-            JOIN `tabMaterial Request` mr ON mr.name = mri.parent
-            WHERE mri.item_code = %s
-            AND mr.custom_employee_function = %s
-            AND mr.docstatus = 1
-            AND mr.status NOT IN ('Ordered', 'Stopped', 'Cancelled')
-            AND mri.qty > mri.ordered_qty
+            SELECT b.expiry_date, IFNULL(SUM(sle.actual_qty), 0) AS qty
+            FROM `tabStock Ledger Entry` sle
+            INNER JOIN `tabBatch` b ON b.name = sle.batch_no
+            WHERE sle.item_code = %s
+              AND sle.batch_planning_id = %s
+              AND sle.project = %s
+              AND sle.is_cancelled = 0
+              AND sle.batch_no IS NOT NULL
+            GROUP BY b.expiry_date
+            ORDER BY expiry_date ASC
             """,
-            (item_code, employee_function)
-        )[0][0] or 0.0)
+            (item_code, doc.name, doc.project, item_code, doc.name, doc.project),
+            as_dict=True,
+        )
+        usable_qty = 0.0
+        expired_qty = 0.0
+        for row in batch_rows:
+            qty = flt(row.qty)
+            if not row.expiry_date or getdate(row.expiry_date) < cutoff_date:
+                expired_qty += qty
+            else:
+                usable_qty += qty
 
-        bp_mr_qty = flt(frappe.db.sql(
+        # Step 1: Get all submitted MR Items for this item/batch_planning/project
+        mr_items = frappe.db.sql(
             """
-            SELECT IFNULL(SUM(mri.qty - mri.ordered_qty), 0)
+            SELECT mri.name, mri.qty, mri.parent
             FROM `tabMaterial Request Item` mri
             JOIN `tabMaterial Request` mr ON mr.name = mri.parent
             WHERE mri.item_code = %s
             AND mri.batch_planning_id = %s
+            AND mr.project = %s
             AND mr.docstatus = 1
-            AND mr.status NOT IN ('Ordered', 'Stopped', 'Cancelled')
-            AND mri.qty > mri.ordered_qty
             """,
-            (item_code, doc.name)
-        )[0][0] or 0.0)
+            (item_code, doc.name, doc.project),
+            as_dict=True
+        )
 
-        global_po_qty = flt(frappe.db.sql(
-            """
-            SELECT IFNULL(SUM(poi.qty - poi.received_qty), 0)
-            FROM `tabPurchase Order Item` poi
-            JOIN `tabPurchase Order` po ON po.name = poi.parent
-            WHERE poi.item_code = %s
-            AND poi.employee_function = %s
-            AND po.docstatus = 1
-            AND po.status NOT IN ('Completed', 'Cancelled')
-            AND poi.qty > poi.received_qty
-            """,
-            (item_code, employee_function)
-        )[0][0] or 0.0)
+        bp_mr_qty = 0.0
+        bp_mr_docs = []
+        bp_mr_count = 0
 
-        bp_po_qty = flt(frappe.db.sql(
+        if mr_items:
+            mr_item_names = [d.name for d in mr_items]
+            
+            # Step 2: Get sum of qty from submitted PO Items linked back to these MR Items
+            po_items = frappe.db.sql(
+                """
+                SELECT poi.material_request_item, IFNULL(SUM(poi.qty), 0) as po_qty
+                FROM `tabPurchase Order Item` poi
+                JOIN `tabPurchase Order` po ON po.name = poi.parent
+                WHERE poi.material_request_item IN %s
+                AND po.docstatus = 1
+                GROUP BY poi.material_request_item
+                """,
+                (mr_item_names,),
+                as_dict=True
+            )
+            
+            po_qty_map = {d.material_request_item: flt(d.po_qty) for d in po_items}
+            
+            total_mr_qty = sum(flt(d.qty) for d in mr_items)
+            total_po_qty = sum(po_qty_map.get(d.name, 0.0) for d in mr_items)
+            
+            bp_mr_qty = max(total_mr_qty - total_po_qty, 0.0)
+            
+            open_mr_parents = set()
+            for mri in mr_items:
+                mri_qty = flt(mri.qty)
+                linked_po_qty = po_qty_map.get(mri.name, 0.0)
+                if mri_qty - linked_po_qty > 0.001:
+                    open_mr_parents.add(mri.parent)
+            
+            bp_mr_docs = list(open_mr_parents)
+            bp_mr_count = len(bp_mr_docs)
+
+        # Open PO calculation
+        open_po_data = frappe.db.sql(
             """
-            SELECT IFNULL(SUM(poi.qty - poi.received_qty), 0)
+            SELECT poi.parent, poi.qty, poi.received_qty
             FROM `tabPurchase Order Item` poi
             JOIN `tabPurchase Order` po ON po.name = poi.parent
             WHERE poi.item_code = %s
             AND poi.batch_planning_id = %s
+            AND po.project = %s
             AND po.docstatus = 1
-            AND po.status NOT IN ('Completed', 'Cancelled')
             AND poi.qty > poi.received_qty
             """,
-            (item_code, doc.name)
-        )[0][0] or 0.0)
-
-        global_grn_qty = flt(frappe.db.sql(
-            """
-            SELECT IFNULL(SUM(pri.qty - pri.returned_qty), 0)
-            FROM `tabPurchase Receipt Item` pri
-            JOIN `tabPurchase Receipt` pr ON pr.name = pri.parent
-            WHERE pri.item_code = %s
-            AND pri.employee_function = %s
-            AND pr.docstatus = 1
-            AND pr.status NOT IN ('Completed', 'Cancelled')
-            AND pri.qty > pri.returned_qty
-            """,
-            (item_code, employee_function)
-        )[0][0] or 0.0)
-
-        bp_grn_qty = flt(frappe.db.sql(
-            """
-            SELECT IFNULL(SUM(pri.qty - pri.returned_qty), 0)
-            FROM `tabPurchase Receipt Item` pri
-            JOIN `tabPurchase Receipt` pr ON pr.name = pri.parent
-            WHERE pri.item_code = %s
-            AND pri.batch_planning_id = %s
-            AND pr.docstatus = 1
-            AND pr.status NOT IN ('Completed', 'Cancelled')
-            AND pri.qty > pri.returned_qty
-            """,
-            (item_code, doc.name)
-        )[0][0] or 0.0)
-
-        net_requirement = max(qty_required - free_stock - bp_mr_qty - bp_po_qty - bp_grn_qty, 0.0)
-
-        batch_info = frappe.db.sql(
-            """
-            SELECT b.expiry_date, SUM(sle.actual_qty) AS actual_qty
-            FROM `tabStock Ledger Entry` sle
-            INNER JOIN `tabBatch` b ON b.name = sle.batch_no
-            WHERE sle.item_code = %s AND sle.is_cancelled = 0
-            AND (b.expiry_date >= %s OR b.expiry_date IS NULL)
-            GROUP BY sle.batch_no, b.expiry_date
-            HAVING SUM(sle.actual_qty) > 0
-            ORDER BY b.expiry_date ASC LIMIT 1
-        """,
-            (item_code, curr_today),
-            as_dict=True,
+            (item_code, doc.name, doc.project),
+            as_dict=True
         )
+        
+        bp_po_docs = list(set([d.parent for d in open_po_data]))
+        bp_po_count = len(bp_po_docs)
+        bp_po_qty = flt(sum(flt(d.qty) - flt(d.received_qty) for d in open_po_data))
 
-        expired_qty = (
-            frappe.db.sql(
-                """
-            SELECT IFNULL(SUM(sle.actual_qty), 0)
-            FROM `tabStock Ledger Entry` sle
-            INNER JOIN `tabBatch` b ON b.name = sle.batch_no
-            WHERE sle.item_code = %s AND sle.is_cancelled = 0
-            AND b.expiry_date < %s
-        """,
-                (item_code, curr_today),
-            )[0][0]
-            or 0
-        )
-
-        usable_qty = flt(batch_info[0].actual_qty) if batch_info else 0
-        expiry_date = batch_info[0].expiry_date if batch_info else None
+        net_requirement = max(qty_required - main_stock - lab_stock - bp_mr_qty - bp_po_qty, 0.0)
 
         res.append(
             {
@@ -870,23 +856,16 @@ def get_material_planning_data(doc_name):
                 "lab_stock": round(lab_stock, 2),
                 "allocated_qty": round(flt(allocated_qty), 2),
                 "free_stock": round(free_stock, 2),
-                "stock_available": round(stock_available, 2),
-                "global_mr_qty": global_mr_qty,
-                "bp_mr_qty": bp_mr_qty,
-                "global_po_qty": global_po_qty,
-                "bp_po_qty": bp_po_qty,
-                "global_grn_qty": global_grn_qty,
-                "bp_grn_qty": bp_grn_qty,
-                "open_pr": round(bp_mr_qty, 2),
-                "open_po": round(bp_po_qty, 2),
-                "open_grn": round(bp_grn_qty, 2),
-                "mr_total_qty": round(bp_mr_qty, 2),
-                "po_pending_qty": round(bp_po_qty, 2),
-                "pr_total_qty": round(bp_grn_qty, 2),
+                "stock_available": round(free_stock, 2),
+                "bp_mr_qty": round(bp_mr_qty, 2),
+                "bp_mr_count": bp_mr_count,
+                "bp_mr_docs": bp_mr_docs,
+                "bp_po_qty": round(bp_po_qty, 2),
+                "bp_po_count": bp_po_count,
+                "bp_po_docs": bp_po_docs,
                 "net_requirement": round(net_requirement, 2),
                 "usable_qty": round(usable_qty, 2),
                 "expired_qty": round(flt(expired_qty), 2),
-                "expiry_date": expiry_date,
             }
         )
 
@@ -913,7 +892,7 @@ def make_material_request(doc_name):
     if not items:
         frappe.throw("No items found to create Material Request.")
     mr = frappe.new_doc("Material Request")
-    mr.material_request_type = "Manufacture"
+    mr.material_request_type = "Purchase"
     mr.custom_employee_function = doc.custom_employee_function
     mr.project = doc.project
     mr.custom_batch_planning_no = doc.name
@@ -986,20 +965,73 @@ def get_batch_wise_shortages(doc_name):
                 }
             item_requirements[item_code]["qty_needed"] += qty_needed
 
+    ef_doc = frappe.get_doc("Employee Function", doc.custom_employee_function)
+    warehouse = next(
+        (r.store_warehouse for r in (ef_doc.table_bukm or []) if r.store_warehouse),
+        None,
+    )
+    if not warehouse:
+        frappe.throw(f"No store warehouse found in Employee Function '{doc.custom_employee_function}'.")
+
     shortages = []
     for item_code, req in item_requirements.items():
-        open_mr_qty = frappe.db.sql("""
-            SELECT COALESCE(SUM(mri.qty - mri.ordered_qty), 0)
+        main_stock = flt(frappe.db.sql(
+            """
+            SELECT IFNULL(SUM(actual_qty), 0)
+            FROM `tabStock Ledger Entry`
+            WHERE item_code = %s
+            AND warehouse = %s
+            AND batch_planning_id = %s
+            AND project = %s
+            AND is_cancelled = 0
+            """,
+            (item_code, warehouse, doc.name, doc.project)
+        )[0][0] or 0.0)
+
+        bp_mr_qty = flt(frappe.db.sql(
+            """
+            SELECT IFNULL(SUM(mri.qty - mri.ordered_qty), 0)
             FROM `tabMaterial Request Item` mri
             JOIN `tabMaterial Request` mr ON mr.name = mri.parent
             WHERE mri.item_code = %s
-            AND mr.custom_batch_planning_no = %s
+            AND mri.batch_planning_id = %s
+            AND mr.project = %s
             AND mr.docstatus = 1
-            AND mr.status NOT IN ('Stopped', 'Cancelled', 'Ordered')
+            AND mr.status NOT IN ('Ordered', 'Stopped', 'Cancelled')
             AND mri.qty > mri.ordered_qty
-        """, (item_code, doc.name))[0][0] or 0
+            """,
+            (item_code, doc.name, doc.project)
+        )[0][0] or 0.0)
 
-        shortage_qty = req["qty_needed"] - flt(open_mr_qty)
+        bp_po_qty = flt(frappe.db.sql(
+            """
+            SELECT IFNULL(SUM(poi.qty - poi.received_qty), 0)
+            FROM `tabPurchase Order Item` poi
+            JOIN `tabPurchase Order` po ON po.name = poi.parent
+            WHERE poi.item_code = %s
+            AND poi.batch_planning_id = %s
+            AND po.project = %s
+            AND po.docstatus = 1
+            AND po.status NOT IN ('Completed', 'Cancelled')
+            AND poi.qty > poi.received_qty
+            """,
+            (item_code, doc.name, doc.project)
+        )[0][0] or 0.0)
+
+        bp_pr_qty = flt(frappe.db.sql(
+            """
+            SELECT IFNULL(SUM(pri.qty), 0)
+            FROM `tabPurchase Receipt Item` pri
+            JOIN `tabPurchase Receipt` pr ON pr.name = pri.parent
+            WHERE pri.item_code = %s
+            AND pri.batch_planning_id = %s
+            AND pr.project = %s
+            AND pr.docstatus = 0
+            """,
+            (item_code, doc.name, doc.project)
+        )[0][0] or 0.0)
+
+        shortage_qty = req["qty_needed"] - main_stock - bp_mr_qty - bp_po_qty - bp_pr_qty
 
         if shortage_qty <= 0:
             continue
@@ -1199,3 +1231,30 @@ def on_stock_entry_submit(doc, method):
     bp.flags.ignore_validate_update_after_submit = True
     bp.save(ignore_permissions=True)
     frappe.db.commit()
+
+
+def sync_batch_expiry_from_grn(doc, method):
+    """
+    After GRN submit, force Batch.expiry_date to match the supplier-provided
+    expiry date entered on the PR Item, overriding any auto-calculated
+    shelf-life-based date.
+    """
+    for item in doc.items:
+        supplier_expiry = item.get("custom_supplier_expiry_date")
+        if not supplier_expiry:
+            continue
+
+        batch_no = item.get("batch_no")
+        if not batch_no and item.get("serial_and_batch_bundle"):
+            batch_no = frappe.db.get_value(
+                "Serial and Batch Entry",
+                {"parent": item.get("serial_and_batch_bundle")},
+                "batch_no"
+            )
+
+        if not batch_no:
+            continue
+
+        current_expiry = frappe.db.get_value("Batch", batch_no, "expiry_date")
+        if current_expiry != getdate(supplier_expiry):
+            frappe.db.set_value("Batch", batch_no, "expiry_date", supplier_expiry, update_modified=False)
