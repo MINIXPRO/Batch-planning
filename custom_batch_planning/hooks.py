@@ -304,6 +304,6 @@ doc_events = {
         "validate": "custom_batch_planning.api.pr_integration.map_purchase_invoice_fields"
     },
     "Stock Ledger Entry": {
-        "before_save": "custom_batch_planning.api.pr_integration.map_sle_fields"
+        "before_insert": "custom_batch_planning.api.pr_integration.map_sle_fields"
     }
 }

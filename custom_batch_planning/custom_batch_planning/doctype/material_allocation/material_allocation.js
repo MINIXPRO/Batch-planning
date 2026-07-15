@@ -491,6 +491,8 @@ window.create_stock_entry = function (frm) {
                             let ef = ef_res.message;
                             let store_row = (ef.table_bukm || []).find(r => r.store_warehouse);
                             let from_warehouse = store_row ? store_row.store_warehouse : null;
+                            let lab_row = (ef.table_szrn || []).find(r => r.lab_warehouse);
+                            let to_warehouse = lab_row ? lab_row.lab_warehouse : null;
 
                     if (!from_warehouse) {
                         frappe.msgprint({
@@ -515,8 +517,11 @@ window.create_stock_entry = function (frm) {
                                 qty: row.allocate_qty,
                                 uom: row.uom,
                                 s_warehouse: from_warehouse,
+                                t_warehouse: to_warehouse,
                                 conversion_factor: 1,
                                 transfer_qty: row.allocate_qty,
+                                batch_planning_id: frm.doc.batch_planning,
+                                project: frm.doc.project_id
                             }));
 
                             let batch_list = (frm.doc.batches_planned || "").split(",").map(s => s.trim());
@@ -529,6 +534,7 @@ window.create_stock_entry = function (frm) {
                                 custom_batch_planning_no: frm.doc.batch_planning,
                                 custom_material_allocation: frm.doc.name,
                                 from_warehouse: from_warehouse,
+                                to_warehouse: to_warehouse,
                                 project: frm.doc.project_id,
                                 bom_no: bom_no || "",
                                 from_bom: bom_no ? 1 : 0,
@@ -543,12 +549,15 @@ window.create_stock_entry = function (frm) {
                                         row.qty = item.qty;
                                         row.uom = item.uom;
                                         row.s_warehouse = item.s_warehouse;
+                                        row.t_warehouse = item.t_warehouse;
                                         row.conversion_factor = 1;
                                         row.transfer_qty = item.qty;
+                                        row.batch_planning_id = item.batch_planning_id;
+                                        row.project = item.project;
                                     });
                                     cur_frm.refresh_field("items");
                                     frappe.show_alert({
-                                        message: __("✅ Stock Entry created. Please fill Target Warehouse and submit."),
+                                        message: __("✅ Stock Entry created and populated. Please review and submit."),
                                         indicator: "green",
                                     });
                                 }

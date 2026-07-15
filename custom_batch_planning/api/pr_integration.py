@@ -100,6 +100,8 @@ def map_stock_entry_fields(doc, method=None):
     for item in doc.items:
         if item.batch_planning_id and not item.to_batch_planning_id:
             item.to_batch_planning_id = item.batch_planning_id
+            
+    frappe.log_error(title="map_stock_entry_fields hook", message=f"SE {doc.name}, items: {[{'bp': i.batch_planning_id, 'to_bp': i.to_batch_planning_id} for i in doc.items]}")
 
     if doc.get("custom_batch_planning_no"):
         return
@@ -164,12 +166,13 @@ def map_sle_fields(doc, method=None):
     of the Stock Ledger Entry for Stock Entries (e.g. Material Transfers).
     """
     if doc.voucher_type == "Stock Entry" and doc.voucher_detail_no:
-        frappe.log_error(title="map_sle_fields hook executed", message=f"SLE: {doc.name}, detail: {doc.voucher_detail_no}")
+        bp_before = doc.batch_planning_id
         if not doc.batch_planning_id:
             bp_id = frappe.db.get_value("Stock Entry Detail", doc.voucher_detail_no, "batch_planning_id")
             if bp_id:
                 doc.batch_planning_id = bp_id
         if not doc.project:
+            proj = frappe.db.get_value("Stock Entry Detail", doc.voucher_detail_no, "project")
             proj = frappe.db.get_value("Stock Entry Detail", doc.voucher_detail_no, "project")
             if proj:
                 doc.project = proj
