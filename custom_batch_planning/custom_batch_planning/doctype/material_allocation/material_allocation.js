@@ -99,6 +99,7 @@ frappe.ui.form.on("Material Allocation", {
                         callback: function(r) {
                             let data = r.message || {};
                             let items = data.items || [];
+                            items = items.filter(d => d.qty_allocated > 0);
                             let ma_count = data.ma_count || 0;
 
                             if (!items.length) {

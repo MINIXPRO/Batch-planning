@@ -454,4 +454,5 @@ def get_allocated_items(batch_planning, employee_function):
         return {"items": [], "ma_count": ma_count}
 
     log_doc = frappe.get_doc("Material Allocation Log", log_name)
-    return {"items": log_doc.get("ma_logs", []), "ma_count": ma_count}
+    items = [item for item in log_doc.get("ma_logs", []) if item.qty_allocated > 0]
+    return {"items": items, "ma_count": ma_count}
